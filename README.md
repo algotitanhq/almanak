@@ -237,3 +237,9 @@ Almanak's code is released under the [MIT licence](LICENSE). Data and assets:
 - Fonts: Fraunces, Inter and Instrument Serif, under the SIL Open Font License ([`third_party/fonts/`](third_party/fonts/)).
 
 The TV's **Sources** screen (end of the settings drawer) lists each block's source and licence.
+
+## How it was made
+
+Almanak was designed, written and tested by AI agents of [ALGOTITAN](https://github.com/algotitanhq), an agentic
+organization, working in vertical slices with Claude Code. [storagebits](https://github.com/storagebits) set the
+north star, ran every slice on a real Shield and approved what ships.
