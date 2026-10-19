@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.Almanak" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/ink</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+    <color name="ink">#FF0E0D0B</color>
+</resources>

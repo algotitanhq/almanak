@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="title">Almanak setup</title>
+<style>
+  @font-face { font-family: "Serif"; src: url("/fonts/serif.ttf") format("truetype"); font-style: italic; }
+  :root { --bg:#0E0D0B; --fg:#F2EDE4; --muted:#F2EDE4B3; --faint:#F2EDE473; --line:#F2EDE426; --accent:#E89E5C; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 24px 16px 96px; }
+  h1 { font: italic 44px/1 "Serif", Georgia, serif; margin: 8px 0 4px; }
+  .lede { color: var(--muted); margin: 0 0 24px; }
+  section { border-top: 1px solid var(--line); padding: 20px 0 8px; }
+  h2 { font: 600 12px/1 system-ui, sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 0 0 14px; }
+  .row { display:flex; align-items:center; justify-content:space-between; gap:12px; margin: 0 0 14px; flex-wrap: wrap; }
+  .row > label { color: var(--fg); }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius: 999px; overflow:hidden; }
+  .seg button { background:none; border:0; color:var(--muted); padding:8px 14px; font:inherit; font-size:14px; cursor:pointer; }
+  .seg button[aria-pressed=true] { background: var(--fg); color: var(--bg); }
+  input[type=text], input[type=password], input[type=url] { width:100%; background:#FFFFFF0D; color:var(--fg); border:1px solid var(--line); border-radius:10px; padding:10px 12px; font:inherit; }
+  select { width:100%; background:#FFFFFF0D; color:var(--fg); border:1px solid var(--line); border-radius:10px; padding:10px 12px; font:inherit; }
+  a { color: var(--accent); }
+  input:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .list { list-style:none; padding:0; margin: 0 0 12px; }
+  .list li { display:flex; align-items:center; justify-content:space-between; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .list li span small { color: var(--faint); margin-left: 6px; }
+  .icon { background:none; border:1px solid var(--line); color: var(--muted); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+  .results button { display:block; width:100%; text-align:left; background:none; border:0; border-bottom:1px solid var(--line); color:var(--fg); padding:10px 2px; font:inherit; cursor:pointer; }
+  .results small { color: var(--faint); margin-left: 6px; }
+  .module { border:1px solid var(--line); border-radius: 14px; padding: 12px 14px 2px; margin-bottom: 12px; }
+  .module .row:first-child label { font: italic 22px/1 "Serif", Georgia, serif; }
+  .hint { color: var(--faint); font-size: 13px; margin: -6px 0 14px; }
+  .bar { position: fixed; left:0; right:0; bottom:0; background: linear-gradient(transparent, var(--bg) 35%); padding: 24px 16px 16px; }
+  .bar div { max-width: 640px; margin: 0 auto; display:flex; align-items:center; gap: 12px; }
+  .save { flex: 0 0 auto; background: var(--fg); color: var(--bg); border: 0; border-radius: 999px; padding: 12px 22px; font: 600 15px system-ui, sans-serif; cursor:pointer; }
+  #status { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Almanak</h1>
+  <p class="lede" data-i18n="lede"></p>
+
+  <section>
+    <h2 data-i18n="appearance"></h2>
+    <div class="row"><label data-i18n="theme"></label><span class="seg" data-key="theme" data-options="Nocturne,Minimal,Paper"></span></div>
+    <div class="row"><label data-i18n="language"></label><span class="seg" data-key="language" data-options="en:English,fr:Français,es:Español"></span></div>
+    <div class="row"><label data-i18n="temperature"></label><span class="seg" data-key="unit" data-options="Celsius:°C,Fahrenheit:°F"></span></div>
+    <div class="row"><label data-i18n="background"></label><span class="seg" data-key="wallpaper" data-options="Sky:@bg_sky,Potd:@bg_potd,None:@bg_plain,Url:@bg_custom"></span></div>
+    <div class="row" id="urlRow"><input type="url" id="wallpaperUrl" data-i18n-ph="url_ph"></div>
+  </section>
+
+  <section>
+    <h2 data-i18n="layout"></h2>
+    <div id="modules"></div>
+  </section>
+
+  <section>
+    <h2 data-i18n="city"></h2>
+    <p class="hint"><span data-i18n="city_hint"></span> <b id="cityNow"></b></p>
+    <input type="text" id="placeQ" data-i18n-ph="city_ph" autocomplete="off">
+    <div class="results" id="places"></div>
+  </section>
+
+  <section>
+    <h2 data-i18n="network"></h2>
+    <select id="agency"></select>
+    <div id="customBox" style="margin-top:12px">
+      <input type="text" id="customName" data-i18n-ph="custom_name_ph" autocomplete="off">
+      <input type="url" id="customGtfs" data-i18n-ph="gtfs_ph" style="margin-top:8px">
+      <input type="url" id="customRt" data-i18n-ph="rt_ph" style="margin-top:8px">
+      <input type="text" id="customKeyName" data-i18n-ph="key_name_ph" style="margin-top:8px" autocomplete="off">
+      <div class="row" style="margin-top:14px"><label data-i18n="key_in"></label><span class="seg" id="customKeyIn" data-options="Header:@header,Query:@query"></span></div>
+    </div>
+    <p class="hint" style="margin-top:10px" data-i18n="network_hint"></p>
+  </section>
+
+  <section>
+    <h2 data-i18n="stops"></h2>
+    <ul class="list" id="stops"></ul>
+    <input type="text" id="stopQ" data-i18n-ph="stop_ph" autocomplete="off">
+    <div class="results" id="stopResults"></div>
+    <div class="row" style="margin-top:14px"><label data-i18n="only_lines"></label></div>
+    <input type="text" id="routes" data-i18n-ph="routes_ph">
+  </section>
+
+  <section>
+    <h2 data-i18n="wifi"></h2>
+    <p class="hint" data-i18n="wifi_hint"></p>
+    <input type="text" id="wifiSsid" data-i18n-ph="wifi_name_ph" autocomplete="off">
+    <div class="row" style="margin-top:14px"><label data-i18n="security"></label><span class="seg" id="wifiSec" data-options="WPA:WPA/WPA2/WPA3,WEP,None:@open"></span></div>
+    <div id="wifiPassRow">
+      <p class="hint" id="wifiPassHint"></p>
+      <input type="password" id="wifiPass" data-i18n-ph="password_ph" autocomplete="off">
+    </div>
+    <div class="row" style="margin-top:14px"><label data-i18n="hidden"></label><span class="seg" id="wifiHidden" data-options="false:@no,true:@yes"></span></div>
+  </section>
+
+  <section id="keySection">
+    <h2 data-i18n="rt_key"></h2>
+    <p class="hint"><span id="keyHint"></span> <a id="keyHelp" target="_blank" rel="noopener" data-i18n="key_help"></a></p>
+    <input type="password" id="rtKey" data-i18n-ph="key_ph" autocomplete="off">
+  </section>
+</main>
+<div class="bar"><div><button class="save" id="save" data-i18n="save"></button><span id="status"></span></div></div>
+
+<script>
+const token = new URLSearchParams(location.search).get("t") || "";
+const api = (path, opts = {}) => fetch(path, { ...opts, headers: { "X-Almanak-Token": token, "Content-Type": "application/json", ...(opts.headers || {}) } });
+const $ = (id) => document.getElementById(id);
+const MODULES = { Weather: ["Bottom:@zone_bottom", "Right:@zone_right"], Bus: ["Right:@zone_right", "Bottom:@zone_bottom"], Almanac: ["UnderClock:@zone_under", "Bottom:@zone_bottom"] };
+let s = null, stopNames = {}, agencies = [];
+const NONE = { id: "", name: "", gtfsUrls: [], realtimeUrl: "", keyName: "", keyIn: "Header", keyHelp: "" };
+const CUSTOM = { id: "custom", name: "", gtfsUrls: [], realtimeUrl: "", keyName: "", keyIn: "Header", keyHelp: "" };
+
+/** The page follows the TV's language setting, live: picking another language translates it before saving. */
+const I18N = {
+  en: {
+    title: "Almanak setup", lede: "Changes appear on the TV as soon as you save.",
+    appearance: "Appearance", theme: "Theme", language: "Language", temperature: "Temperature", background: "Background",
+    bg_sky: "Sky", bg_potd: "Photo of the day", bg_plain: "Plain", bg_custom: "Custom", url_ph: "https://… (an image URL)",
+    layout: "Layout", on: "On", off: "Off", position: "Position", size: "Size", small: "Small", medium: "Medium", large: "Large",
+    zone_bottom: "Bottom band", zone_right: "Right column", zone_under: "Under the date",
+    mod_Weather: "Weather", mod_Bus: "Bus", mod_Almanac: "Almanac line",
+    city: "City", city_hint: "Weather, sunrise and sunset are computed for this place. Now:", city_ph: "Search a city…", approx: "from the TV's time zone",
+    stops: "Bus stops", stop_ph: "Add a stop: number or street", remove: "Remove",
+    only_lines: "Only these lines", routes_ph: "e.g. 160, 51 — empty for all lines",
+    wifi: "Guest Wi-Fi", wifi_hint: "Shown on the TV as a QR code for a minute when someone presses an arrow on the remote. Leave the name empty to turn it off.",
+    wifi_name_ph: "Network name", security: "Security", open: "Open", password_ph: "Password", hidden: "Hidden network", no: "No", yes: "Yes",
+    wifi_pass_set: "A password is set. Leave empty to keep it.",
+    network: "Transit network", no_network: "None (no bus times)", network_hint: "Changing the network clears the stops. Save, wait a minute for its schedule to download, then add stops.",
+    custom: "Other (GTFS URL)", custom_name_ph: "Network name", gtfs_ph: "GTFS schedule URL (.zip)", rt_ph: "GTFS-realtime trip updates URL (optional)",
+    key_name_ph: "Key header or parameter name (optional)", key_in: "Key sent in", header: "Header", query: "URL",
+    rt_key: "Real-time key", key_help: "Get a key",
+    key_set: "A key is set. Leave empty to keep it.", key_none: "No key yet: bus times are the published schedule.",
+    key_ph: "Paste a new key to replace it",
+    save: "Save", saving: "Saving…", saved: "Saved — look at the TV.", not_saved: "Not saved ({0}).",
+    scan: "Scan the QR code shown on the TV to open this page.",
+  },
+  fr: {
+    title: "Réglages Almanak", lede: "Les changements apparaissent sur la TV dès l’enregistrement.",
+    appearance: "Apparence", theme: "Thème", language: "Langue", temperature: "Température", background: "Fond",
+    bg_sky: "Ciel", bg_potd: "Photo du jour", bg_plain: "Uni", bg_custom: "Perso", url_ph: "https://… (adresse d’une image)",
+    layout: "Disposition", on: "Activé", off: "Désactivé", position: "Position", size: "Taille", small: "Petit", medium: "Moyen", large: "Grand",
+    zone_bottom: "Bandeau du bas", zone_right: "Colonne de droite", zone_under: "Sous la date",
+    mod_Weather: "Météo", mod_Bus: "Bus", mod_Almanac: "Ligne almanach",
+    city: "Ville", city_hint: "La météo, le lever et le coucher du soleil sont calculés pour ce lieu. Actuellement :", city_ph: "Rechercher une ville…", approx: "d’après le fuseau horaire de la TV",
+    stops: "Arrêts de bus", stop_ph: "Ajouter un arrêt : numéro ou rue", remove: "Retirer",
+    only_lines: "Seulement ces lignes", routes_ph: "ex. 160, 51 — vide pour toutes les lignes",
+    wifi: "Wi-Fi invités", wifi_hint: "Affiché sur la TV en QR code pendant une minute quand on appuie sur une flèche de la télécommande. Laissez le nom vide pour le désactiver.",
+    wifi_name_ph: "Nom du réseau", security: "Sécurité", open: "Ouvert", password_ph: "Mot de passe", hidden: "Réseau masqué", no: "Non", yes: "Oui",
+    wifi_pass_set: "Un mot de passe est enregistré. Laissez vide pour le garder.",
+    network: "Réseau de transport", no_network: "Aucun (pas d’horaires de bus)", network_hint: "Changer de réseau vide les arrêts. Enregistrez, attendez une minute que son horaire se télécharge, puis ajoutez les arrêts.",
+    custom: "Autre (adresse GTFS)", custom_name_ph: "Nom du réseau", gtfs_ph: "Adresse de l’horaire GTFS (.zip)", rt_ph: "Adresse GTFS-realtime des trajets (facultatif)",
+    key_name_ph: "Nom de l’en-tête ou du paramètre de clé (facultatif)", key_in: "Clé envoyée dans", header: "En-tête", query: "Adresse",
+    rt_key: "Clé temps réel", key_help: "Obtenir une clé",
+    key_set: "Une clé est enregistrée. Laissez vide pour la garder.", key_none: "Pas encore de clé : les heures de bus sont l’horaire publié.",
+    key_ph: "Collez une nouvelle clé pour la remplacer",
+    save: "Enregistrer", saving: "Enregistrement…", saved: "Enregistré — regardez la TV.", not_saved: "Non enregistré ({0}).",
+    scan: "Scannez le QR code affiché sur la TV pour ouvrir cette page.",
+  },
+  es: {
+    title: "Ajustes de Almanak", lede: "Los cambios aparecen en la TV en cuanto guardas.",
+    appearance: "Apariencia", theme: "Tema", language: "Idioma", temperature: "Temperatura", background: "Fondo",
+    bg_sky: "Cielo", bg_potd: "Foto del día", bg_plain: "Liso", bg_custom: "Propia", url_ph: "https://… (dirección de una imagen)",
+    layout: "Disposición", on: "Activado", off: "Desactivado", position: "Posición", size: "Tamaño", small: "Pequeño", medium: "Mediano", large: "Grande",
+    zone_bottom: "Banda inferior", zone_right: "Columna derecha", zone_under: "Bajo la fecha",
+    mod_Weather: "Tiempo", mod_Bus: "Autobús", mod_Almanac: "Línea del almanaque",
+    city: "Ciudad", city_hint: "El tiempo, el amanecer y el atardecer se calculan para este lugar. Ahora:", city_ph: "Buscar una ciudad…", approx: "según la zona horaria de la TV",
+    stops: "Paradas de autobús", stop_ph: "Añadir parada: número o calle", remove: "Quitar",
+    only_lines: "Solo estas líneas", routes_ph: "p. ej. 160, 51 — vacío para todas las líneas",
+    wifi: "Wi-Fi de invitados", wifi_hint: "Se muestra en la TV como código QR durante un minuto cuando alguien pulsa una flecha del mando. Deja el nombre vacío para desactivarlo.",
+    wifi_name_ph: "Nombre de la red", security: "Seguridad", open: "Abierta", password_ph: "Contraseña", hidden: "Red oculta", no: "No", yes: "Sí",
+    wifi_pass_set: "Hay una contraseña guardada. Déjala vacía para conservarla.",
+    network: "Red de transporte", no_network: "Ninguna (sin horarios de autobús)", network_hint: "Cambiar de red borra las paradas. Guarda, espera un minuto a que se descargue su horario y luego añade las paradas.",
+    custom: "Otra (dirección GTFS)", custom_name_ph: "Nombre de la red", gtfs_ph: "Dirección del horario GTFS (.zip)", rt_ph: "Dirección GTFS-realtime de los viajes (opcional)",
+    key_name_ph: "Nombre del encabezado o parámetro de la clave (opcional)", key_in: "Clave enviada en", header: "Encabezado", query: "Dirección",
+    rt_key: "Clave de tiempo real", key_help: "Obtener una clave",
+    key_set: "Hay una clave guardada. Déjala vacía para conservarla.", key_none: "Aún no hay clave: los horarios son los publicados.",
+    key_ph: "Pega una clave nueva para reemplazarla",
+    save: "Guardar", saving: "Guardando…", saved: "Guardado — mira la TV.", not_saved: "No guardado ({0}).",
+    scan: "Escanea el código QR que aparece en la TV para abrir esta página.",
+  },
+};
+/** Before the settings load (or if they can't), the phone's own language. */
+const lang = () => (s && I18N[s.language]) ? s.language : (I18N[navigator.language.slice(0, 2)] ? navigator.language.slice(0, 2) : "en");
+const t = (key, ...args) => (I18N[lang()][key] ?? I18N.en[key] ?? key).replace(/\{(\d)\}/g, (_, i) => args[i]);
+
+function translate() {
+  document.documentElement.lang = lang();
+  document.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
+  document.querySelectorAll("[data-i18n-ph]").forEach((el) => (el.placeholder = t(el.dataset.i18nPh)));
+}
+
+function seg(el, value, onPick) {
+  el.innerHTML = "";
+  for (const opt of el.dataset.options.split(",")) {
+    const [v, raw] = opt.includes(":") ? opt.split(":") : [opt, opt];
+    const label = raw.startsWith("@") ? t(raw.slice(1)) : raw;
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = label; b.setAttribute("aria-pressed", String(v === value));
+    b.onclick = () => { onPick(v); render(); };
+    el.appendChild(b);
+  }
+}
+
+/** Text fields are filled from s only on load and after a save: render() runs on every click, mid-typing. */
+function fillFields() {
+  const a = s.agency, custom = a.id === "custom";
+  $("customName").value = custom ? a.name : "";
+  $("customGtfs").value = custom ? (a.gtfsUrls[0] || "") : "";
+  $("customRt").value = custom ? a.realtimeUrl : "";
+  $("customKeyName").value = custom ? a.keyName : "";
+  $("wallpaperUrl").value = s.wallpaperUrl || "";
+  $("routes").value = (s.routes || []).join(", ");
+  $("wifiSsid").value = s.guestWifi.ssid;
+}
+
+function render() {
+  translate();
+  document.querySelectorAll(".seg[data-key]").forEach((el) => seg(el, s[el.dataset.key], (v) => (s[el.dataset.key] = v)));
+  $("urlRow").style.display = s.wallpaper === "Url" ? "" : "none";
+  $("cityNow").textContent = s.city ? s.city.name : (s.approxCity ? s.approxCity.name + " · " + t("approx") : "—");
+  seg($("wifiSec"), s.guestWifi.security, (v) => (s.guestWifi.security = v));
+  seg($("wifiHidden"), String(s.guestWifi.hidden), (v) => (s.guestWifi.hidden = v === "true"));
+  $("wifiPassRow").style.display = s.guestWifi.security === "None" ? "none" : "";
+  $("wifiPassHint").textContent = s.guestWifiPasswordSet ? t("wifi_pass_set") : "";
+  const sel = $("agency"); sel.innerHTML = "";
+  for (const a of [...(s.agency.id ? [] : [NONE]), ...agencies, CUSTOM]) {
+    const o = document.createElement("option"); o.value = a.id; o.textContent = a.id === "custom" ? t("custom") : a.id ? a.name : t("no_network");
+    sel.appendChild(o);
+  }
+  sel.value = s.agency.id;
+  $("customBox").style.display = s.agency.id === "custom" ? "" : "none";
+  seg($("customKeyIn"), s.agency.keyIn, (v) => (s.agency.keyIn = v));
+  $("keySection").style.display = s.agency.realtimeUrl && s.agency.keyName ? "" : "none";
+  $("keyHelp").style.display = s.agency.keyHelp ? "" : "none";
+  $("keyHelp").href = s.agency.keyHelp || "#";
+  $("keyHint").textContent = t(s.realtimeKeySet ? "key_set" : "key_none");
+
+  const mods = $("modules"); mods.innerHTML = "";
+  for (const m of s.modules) {
+    const box = document.createElement("div"); box.className = "module";
+    box.innerHTML = `<div class="row"><label>${t("mod_" + m.module)}</label><span class="seg" data-options="true:@on,false:@off"></span></div>
+      <div class="row"><label>${t("position")}</label><span class="seg" data-options="${MODULES[m.module].join(",")}"></span></div>
+      <div class="row"><label>${t("size")}</label><span class="seg" data-options="Small:@small,Medium:@medium,Large:@large"></span></div>`;
+    const [on, zone, size] = box.querySelectorAll(".seg");
+    seg(on, String(m.enabled), (v) => (m.enabled = v === "true"));
+    seg(zone, m.zone, (v) => (m.zone = v));
+    seg(size, m.size, (v) => (m.size = v));
+    mods.appendChild(box);
+  }
+
+  const ul = $("stops"); ul.innerHTML = "";
+  s.stops.forEach((id, i) => {
+    const li = document.createElement("li");
+    const label = document.createElement("span"); label.append(entry(id, stopNames[id]));
+    const tools = document.createElement("span");
+    li.append(label, tools);
+    if (i > 0) tools.appendChild(btn("↑", () => { s.stops.splice(i - 1, 0, s.stops.splice(i, 1)[0]); render(); }));
+    tools.appendChild(btn(t("remove"), () => { s.stops.splice(i, 1); render(); }));
+    ul.appendChild(li);
+  });
+}
+
+/** Text-only rendering for anything that comes from a feed or a search (never innerHTML). */
+function entry(main, detail) {
+  const f = document.createDocumentFragment();
+  f.append(document.createTextNode(main));
+  const sm = document.createElement("small"); sm.textContent = detail || ""; f.append(sm);
+  return f;
+}
+
+function btn(label, onclick) { const b = document.createElement("button"); b.type = "button"; b.className = "icon"; b.textContent = label; b.onclick = onclick; return b; }
+
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+$("placeQ").oninput = debounce(async (e) => {
+  const res = await (await api("/api/places?q=" + encodeURIComponent(e.target.value))).json();
+  $("places").innerHTML = "";
+  for (const p of res) {
+    const b = document.createElement("button"); b.type = "button";
+    b.append(entry(p.name, p.detail));
+    b.onclick = () => { s.city = { name: p.name, lat: p.lat, lon: p.lon }; $("places").innerHTML = ""; $("placeQ").value = ""; render(); };
+    $("places").appendChild(b);
+  }
+}, 300);
+
+$("stopQ").oninput = debounce(async (e) => {
+  const res = await (await api("/api/stops?q=" + encodeURIComponent(e.target.value))).json();
+  $("stopResults").innerHTML = "";
+  for (const st of res) {
+    stopNames[st.id] = st.name;
+    const b = document.createElement("button"); b.type = "button";
+    b.append(entry(st.id, st.name));
+    b.onclick = () => { if (!s.stops.includes(st.id)) s.stops.push(st.id); $("stopResults").innerHTML = ""; $("stopQ").value = ""; render(); };
+    $("stopResults").appendChild(b);
+  }
+}, 300);
+
+$("wifiSsid").oninput = (e) => (s.guestWifi.ssid = e.target.value);
+
+// Another network: its stop codes, line numbers and key mean nothing here.
+$("agency").onchange = (e) => {
+  const preset = agencies.find((a) => a.id === e.target.value);
+  s.agency = structuredClone(preset || (e.target.value ? CUSTOM : NONE));
+  s.stops = []; s.routes = []; stopNames = {}; s.realtimeKeySet = false;
+  fillFields(); render();
+};
+$("customName").oninput = (e) => (s.agency.name = e.target.value);
+$("customGtfs").oninput = (e) => (s.agency.gtfsUrls = [e.target.value.trim()].filter(Boolean));
+$("customRt").oninput = (e) => { s.agency.realtimeUrl = e.target.value.trim(); render(); };
+$("customKeyName").oninput = (e) => { s.agency.keyName = e.target.value.trim(); render(); };
+
+$("save").onclick = async () => {
+  s.wallpaperUrl = $("wallpaperUrl").value.trim();
+  s.routes = $("routes").value.split(",").map((x) => x.trim()).filter(Boolean);
+  s.realtimeKey = $("rtKey").value.trim();
+  s.guestWifi.password = $("wifiPass").value;
+  $("status").textContent = t("saving");
+  const r = await api("/api/settings", { method: "PUT", body: JSON.stringify(s) });
+  if (r.ok) { s = await r.json(); $("rtKey").value = ""; $("wifiPass").value = ""; fillFields(); render(); $("status").textContent = t("saved"); }
+  else $("status").textContent = t("not_saved", r.status);
+};
+
+(async () => {
+  translate();
+  const r = await api("/api/settings");
+  if (!r.ok) { document.body.innerHTML = "<main><h1>Almanak</h1><p class='lede'></p></main>"; document.querySelector(".lede").textContent = t("scan"); return; }
+  s = await r.json();
+  agencies = await (await api("/api/agencies")).json();
+  for (const id of s.stops) {
+    const found = await (await api("/api/stops?q=" + id)).json();
+    if (found[0]) stopNames[id] = found[0].name;
+  }
+  fillFields();
+  render();
+})();
+</script>
+</body>
+</html>
