@@ -1,0 +1,199 @@
+name: Release
+
+# Pushing a tag such as v1.0.0 (on a commit of main) builds the release APK, signs it with the upload key held in
+# the `release` environment's secrets, verifies it and publishes a GitHub release with the notes of that version
+# from CHANGELOG.md. Run by hand on main (workflow_dispatch), it is a dry run: same tests, build and signing, the
+# APK is kept as a workflow artifact and nothing is published. Release builds carry no API key (app/build.gradle.kts).
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Build and sign
+    # A manual run only from main: the signing secrets never reach another branch's code.
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: release
+    permissions:
+      contents: read
+    env:
+      BUILD_TOOLS: "36.0.0"
+      # SHA-256 of the upload key's certificate (public; DECISIONS.md, "Upload key"). The APK must be signed by this
+      # certificate alone: a keystore swapped in the secrets cannot publish under another key.
+      EXPECTED_SIGNER: "401bc0c3cedd1217e82a1dd41d786893f47936eaee8dd22716f8416a715b6960"
+      PUBLISH: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Read the version
+        id: version
+        run: |
+          version=$(sed -n 's/^val almanakVersion = "\(.*\)"$/\1/p' app/build.gradle.kts)
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::almanakVersion in app/build.gradle.kts is missing or not MAJOR.MINOR.PATCH"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Almanak $version"
+
+      - name: Check the tag
+        if: env.PUBLISH == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match versionName $VERSION"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::tag $GITHUB_REF_NAME is not on main"
+            exit 1
+          fi
+
+      - name: Extract the release notes from CHANGELOG.md
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p out/dist
+          awk -v h="## [$VERSION]" '
+            index($0, h) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found && /^\[[^]]*\]: / { next }
+            found { print }
+          ' CHANGELOG.md | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}' > out/changes.md
+          if ! grep -q '[^[:space:]]' out/changes.md; then
+            echo "::error::no section for $VERSION in CHANGELOG.md"
+            exit 1
+          fi
+          if [ "$PUBLISH" = true ] && ! grep -F "## [$VERSION] - " CHANGELOG.md | grep -qE ' - [0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
+            echo "::error::the $VERSION section of CHANGELOG.md has no release date"
+            exit 1
+          fi
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+
+      - name: Install SDK packages
+        run: sdkmanager "platforms;android-37.2" "build-tools;$BUILD_TOOLS"
+
+      # No Gradle cache: a signed release is built from source only, never from outputs another run saved.
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-disabled: true
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest
+
+      - name: Decode the upload key
+        env:
+          ALMANAK_KEYSTORE_B64: ${{ secrets.ALMANAK_KEYSTORE_B64 }}
+          ALMANAK_KEYSTORE_PASSWORD: ${{ secrets.ALMANAK_KEYSTORE_PASSWORD }}
+          ALMANAK_KEY_ALIAS: ${{ secrets.ALMANAK_KEY_ALIAS }}
+          ALMANAK_KEY_PASSWORD: ${{ secrets.ALMANAK_KEY_PASSWORD }}
+        run: |
+          for name in ALMANAK_KEYSTORE_B64 ALMANAK_KEYSTORE_PASSWORD ALMANAK_KEY_ALIAS ALMANAK_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then echo "::error::secret $name is not set"; exit 1; fi
+          done
+          umask 077
+          printf '%s' "$ALMANAK_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/almanak-upload.jks"
+          test -s "$RUNNER_TEMP/almanak-upload.jks"
+
+      - name: Build and sign the release APK
+        env:
+          ALMANAK_KEYSTORE: ${{ runner.temp }}/almanak-upload.jks
+          ALMANAK_KEYSTORE_PASSWORD: ${{ secrets.ALMANAK_KEYSTORE_PASSWORD }}
+          ALMANAK_KEY_ALIAS: ${{ secrets.ALMANAK_KEY_ALIAS }}
+          ALMANAK_KEY_PASSWORD: ${{ secrets.ALMANAK_KEY_PASSWORD }}
+        # A fresh daemon that ends with the step: the passwords do not outlive it.
+        run: ./gradlew --no-daemon --no-build-cache assembleRelease
+
+      - name: Remove the upload key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/almanak-upload.jks"
+
+      - name: Verify the signature and package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          apksigner="$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
+          apk="out/dist/almanak-$VERSION.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$apk"
+          "$apksigner" verify --print-certs "$apk" > "$RUNNER_TEMP/verify.txt"
+          grep -E '^Signer #1 certificate (DN|SHA-256)' "$RUNNER_TEMP/verify.txt" | tee out/cert.txt
+          signers=$(grep -cE '^Signer #[0-9]+ certificate SHA-256 digest: ' "$RUNNER_TEMP/verify.txt" || true)
+          signer=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/verify.txt")
+          # A v3.1 rotation signer or a source stamp would be a second certificate: refuse them too.
+          if grep -qE '^(Signer \(|Source Stamp)' "$RUNNER_TEMP/verify.txt"; then
+            echo "::error::the APK carries a rotation signer or a source stamp"
+            exit 1
+          fi
+          if [ "$signers" != 1 ] || [ "$signer" != "$EXPECTED_SIGNER" ]; then
+            echo "::error::the APK is not signed by the Almanak upload key alone ($signers signer(s), #1 is $signer)"
+            exit 1
+          fi
+          (cd out/dist && sha256sum -- *.apk > SHA256SUMS && cat SHA256SUMS)
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: almanak-${{ steps.version.outputs.version }}
+          path: out/
+          retention-days: 7
+          if-no-files-found: error
+
+  publish:
+    name: Publish the GitHub release
+    needs: build
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The only job with a write token: no secrets, no build, no third-party action.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: almanak-${{ needs.build.outputs.version }}
+          path: out
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          fingerprint=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' out/cert.txt)
+          test -n "$fingerprint"
+          {
+            cat out/changes.md
+            echo
+            echo "### Install"
+            echo
+            echo "Download \`almanak-$VERSION.apk\` and sideload it on the TV (README, *Install*)."
+            echo "Built by GitHub Actions from \`${GITHUB_SHA::7}\`; the APK contains no API key."
+            echo
+            echo "Signing certificate SHA-256: \`$fingerprint\`. Checksums: \`SHA256SUMS\`."
+          } > notes.md
+          gh release create "$GITHUB_REF_NAME" out/dist/* --repo "$GITHUB_REPOSITORY" \
+            --title "Almanak $VERSION" --notes-file notes.md --verify-tag

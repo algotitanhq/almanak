@@ -2,6 +2,7 @@ package app.almanak.ephemeris
 
 import android.content.res.Resources
 import android.util.Log
+import app.almanak.BuildConfig
 import app.almanak.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -53,7 +54,7 @@ class OnThisDaySource(
         val url = "%s/%s/onthisday/selected/%02d/%02d".format(baseUrl, lang, date.monthValue, date.dayOfMonth)
         try {
             // Wikimedia asks API clients to identify themselves.
-            val req = Request.Builder().url(url).header("User-Agent", "Almanak/0.1 (Android TV ambient display)").build()
+            val req = Request.Builder().url(url).header("User-Agent", "Almanak/${BuildConfig.VERSION_NAME} (Android TV ambient display)").build()
             http.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}")
                 val items = pick(json.decodeFromString<Feed>(resp.body.string()))

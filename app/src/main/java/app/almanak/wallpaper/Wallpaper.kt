@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import android.util.Log
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import app.almanak.BuildConfig
 import app.almanak.ephemeris.SunTimes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -125,7 +126,7 @@ class PhotoSource(
     }
 
     private fun get(url: String) = http.newCall(
-        Request.Builder().url(url).header("User-Agent", "Almanak/0.1 (Android TV ambient display)").build(),
+        Request.Builder().url(url).header("User-Agent", "Almanak/${BuildConfig.VERSION_NAME} (Android TV ambient display)").build(),
     ).execute().also { if (!it.isSuccessful) { it.close(); throw IOException("HTTP ${it.code} for $url") } }
 
     @Serializable private data class Featured(val image: Image? = null)

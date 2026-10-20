@@ -658,3 +658,134 @@ features plus populaires ».
   or a required variable (fails at once, says why). A home LAN address must not be published; the three survey
   lines above now say "the Shield's LAN address". The value stayed in `almanak-public`'s history only; this repo's
   single import commit does not carry it (ALG-89).
+
+## v1.0.0 release: signing, versionCode, release workflow (ALG-111, 2026-10-20)
+
+### Release signing from the environment
+- **Context.** v1.0.0 ships as a signed APK on GitHub Releases (no Play Store). Until now `assembleRelease` gave an
+  unsigned APK and releases were to be signed by hand (REPORT, Gates 3–4).
+- **Options.** (1) A `signingConfig` read from `local.properties`; (2) from environment variables only;
+  (3) sign outside Gradle with `apksigner` in the workflow.
+- **Choice.** (2): `ALMANAK_KEYSTORE` (a path), `ALMANAK_KEYSTORE_PASSWORD`, `ALMANAK_KEY_ALIAS`,
+  `ALMANAK_KEY_PASSWORD`. All four set: the release is signed with that key. None set: it stays unsigned
+  (`app-release-unsigned.apk`), with `signingConfig = null` written out so it can never fall back to a debug key.
+  Some set, or a keystore path that is not a file: release builds fail (in `preReleaseBuild`) and name the
+  missing variables; debug builds and IDE sync are not affected. The base64 keystore (`ALMANAK_KEYSTORE_B64`)
+  exists only as an Actions secret: the workflow decodes it into the runner's temp dir and passes the path, so
+  Gradle never writes key material under `build/`.
+- **Why.** `local.properties` is a file people copy around and already holds other settings; environment
+  variables come straight from Actions secrets or a shell that loads the key files. Signing in Gradle keeps the
+  same command (`assembleRelease`) for CI and for a local check.
+
+### No API key in a release APK
+- The build-time realtime key (`REALTIME_API_KEY`, `STM_API_KEY`, `local.properties`) is overridden with `""` in
+  the release build type: only debug builds can carry one. A key in a published APK is a leaked key, and users
+  paste their own from the phone page anyway. Checked: with `REALTIME_API_KEY` set, the debug dex contains it and
+  the release dex does not.
+
+### versionCode rule
+- `versionCode = major * 10000 + minor * 100 + patch`, computed from `versionName` (one source of truth,
+  `almanakVersion` in `app/build.gradle.kts`, which must be `MAJOR.MINOR.PATCH`). 1.0.0 → 10000. Minor and patch
+  stay below 100 (the build fails otherwise). It always grows with the version, and it is above the 1 of the
+  0.1.0 debug builds, so a 1.0.0 build signed with the same key updates them.
+
+### Upload key
+- RSA 4096, alias `almanak-upload`, PKCS12, valid until 2054 (10 000 days), held by the maintainer outside the
+  repository. Certificate SHA-256
+  `40:1B:C0:C3:CE:DD:12:17:E8:2A:1D:D4:1D:78:68:93:F4:79:36:EA:EE:8D:D2:27:16:F8:41:6A:71:5B:69:60`.
+- It was generated on the agents' build VM, not on storagebits's computer as REPORT Gate 4 planned: the agents'
+  GitHub App cannot set Actions secrets (403), and storagebits takes the key off the VM anyway to back it up
+  (ALG-110 decision). The hand-off is the `key-handoff` document of ALG-111. Losing this key means sideloaded
+  users can no longer update without uninstalling.
+- APK signature: v2 only (minSdk 28 needs no v1; AGP's default).
+
+### Release workflow (`.github/workflows/release.yml`)
+- On the Kronograf model: a tag `v*` builds, signs, verifies (`apksigner verify --print-certs`), writes
+  `SHA256SUMS` and runs `gh release create` with the CHANGELOG section of that version plus the certificate's
+  SHA-256. `workflow_dispatch` on `main` is a dry run: the same tests, build and signing, the APK kept 7 days as an
+  artifact, nothing published.
+- **Two jobs.** `build` (token `contents: read`) holds the signing secrets; `publish` (`contents: write`, only on a
+  tag push) has no secret, no build and no third-party action: it downloads the artifact and runs `gh`.
+- **Who can sign.** The secrets live in a GitHub environment `release`, whose deployment rule allows only tags
+  `v*` and `main` (set up by storagebits, `key-handoff`). The job also refuses a manual run off `main`, a tag that
+  does not equal `v` + `versionName`, and a tagged commit that is not on `main`.
+- **Guards.** The CHANGELOG must have a section for the version, dated for a tag; all four secrets must be set (a
+  dry run without them fails, it does not build unsigned); `bash -eo pipefail` on every step.
+- **Secret handling.** Unit tests run first, without secrets. Secrets reach only the decode and build steps, as
+  `env:`; the build uses `--no-daemon` so no daemon keeps the passwords; the keystore file is deleted in an
+  `always()` step. Checkout without persisted credentials.
+- **No cache.** `setup-gradle` with `cache-disabled` and `--no-build-cache`: a signed APK is built from source,
+  never from task outputs another run saved (about 70 s more).
+- **Pinned actions.** In this workflow every action is pinned to a commit SHA (version in a comment), unlike
+  `ci.yml`'s major tags: this job holds the signing key. Bump them by hand when a release needs it.
+- One `concurrency` group for all releases, never cancelled.
+
+### README and links point to the public repo
+- The README's badges, clone URL and install links point to `algotitanhq/almanak` (the public release mirror,
+  ALG-110 decision), since the README is written for the public. In the private repo the badge shows the mirror's
+  CI.
+
+### User-Agent
+- Wikimedia requests sent `Almanak/0.1`; they now send `Almanak/<versionName>` from `BuildConfig`.
+
+### Signer pinned in the release workflow
+- **Context.** Verify printed the certificate but accepted any key: a keystore swapped in the secrets would have
+  published under another key, and sideloaded users would not be able to update (QA, ALG-111).
+- **Choice.** The upload certificate's SHA-256 is committed in `release.yml` (`EXPECTED_SIGNER`, public); Verify
+  fails unless the APK has exactly one signer with that digest. Changing the key now takes a reviewed commit, not
+  only a secret.
+
+### Export to the release mirror: `tools/publish.sh`
+- **Context.** ALG-110 decision: work in `storagebits/almanak` only; `algotitanhq/almanak` gets one scanned export
+  commit per version, just before the tag. The private history must never reach it.
+- **Choice.** The script takes the tree of `git archive HEAD` (tracked files only: ignored `shots/`,
+  `local.properties`, `build/` cannot slip in), scans it, and only then commits it on top of the mirror's `main`
+  as "Almanak vX.Y.Z" with a neutral author (`Almanak contributors`, see ALG-113) and a `Source-Commit:` trailer. Any hit, or a
+  scan that does not finish, exits 1 before the commit; hits print rule and file:line, never the value. Default
+  is a dry run; `--push` pushes `main` only, from a commit of `origin/main` with a dated CHANGELOG section. The tag
+  stays a separate, manual step (the release workflow then checks it against `versionName`).
+- **Two scanners.** `gitleaks dir` for secrets, run with a config and ignore file of the script's own (a
+  `.gitleaks.toml` or `.gitleaksignore` in the tree would otherwise silence it, and is itself a forbidden path).
+  `tools/publish_scan.py` for the rest, after a security-auditor pass found the first grep version fail-open
+  (file names with `:`, an IP right after an allowed one, symlinks, UTF-16 and binaries, case of key files): it
+  walks the tree in Python, flags every symlink, reads UTF-8/UTF-16 text and the printable strings of binaries,
+  inflates PNG text chunks and reads EXIF tags (GPS, device, owner are hits; pixel size is not: the launcher PNGs
+  carry one; TIFF, WebP and HEIC EXIF too). Archives are not looked into, so any archive but the Gradle wrapper
+  is a hit. gitleaks still reads a `.gitleaksignore` in the scanned tree whatever its flags say: such files are
+  reported, then removed from the scanned copy so gitleaks runs on its default rules. Short VM names are matched in text only: a letter and two digits occur at random in
+  compressed images. Its own patterns use character classes (`trito[n]`) so the file does not match itself.
+- **Allowed values.** `10.0.2.x` (the Android emulator's fixed NAT address, the same everywhere), `192.0.2.x`
+  (TEST-NET-1, not private: the README's example), `release@almanak.invalid`, GitHub no-reply and example.com
+  addresses. Anything else that looks like an e-mail is a hit.
+- **Commits made on the mirror.** The export replaces the mirror's tree, so an edit made there would be lost. The
+  last export is the newest commit whose `Source-Commit` names a commit of this repo with the same tree (a subject
+  can be copied, a matching tree cannot); the mirror's root commit stands for the first import. Commits after it
+  stop the script, listed; once they are ported here, `--ported <mirror sha>` lets it go on. storagebits's README
+  commit `8ab7361` is ported in this PR, with the import's scrubs (ALG-88, ALG-89), which existed only on the
+  mirror.
+
+## v1.0.0 publish prep (ALG-113, 2026-10-20)
+
+### CHANGELOG date
+- **Context.** `publish.sh --push` and the release workflow (on a tag) refuse an undated `1.0.0` section; the
+  publish happens in its own issue, after storagebits's release card, so its day is not known yet.
+- **Choice.** Date the section now (`2026-10-20`, the day this prep merges). The rule: the date is the day the
+  tag `v1.0.0` is pushed. If the publish happens on another day, the publish issue fixes the date in a one-line
+  commit before the export (the export then carries the right date; nothing is re-tagged).
+
+### Export author on a domain nobody can claim
+- **Context.** Release-gate NIT (ALG-111): the export commits were authored with a no-reply address on a `.dev`
+  domain the organization does not hold. Whoever registers that domain could verify the address on a GitHub
+  account and have every export commit shown as theirs.
+- **Choice.** `Almanak contributors <release@almanak.invalid>`: `.invalid` is reserved (RFC 2606) and can never be
+  registered, so the address can never be verified. It is the only project address the scanner allows (besides GitHub no-reply and `example.*`);
+  the first import keeps its old author in the mirror's history (not rewritten: it is public history and harmless).
+
+### gitleaks findings in the export scan's output
+- **Context.** Release-gate NIT (QA, ALG-111): on a planted token the `HIT [gitleaks]` block listed no finding (the
+  inline CSV parser printed nothing; the verdict, exit 1, was right). Not reproduced here with gitleaks 8.30.1, so the
+  cause on the reviewer's VM is unknown: the fix removes the fragile parts instead of guessing.
+- **Choice.** gitleaks writes a JSON report (stable field names across 8.x); `publish_scan.py --gitleaks-report`
+  prints one `HIT [gitleaks:<rule>] file:line` per finding, path relative to the scanned tree, never the secret
+  (`--redact` stays). When the report is missing, unreadable (even halfway) or empty although gitleaks failed, the script says so
+  and prints gitleaks' own (redacted) log, so an empty list can no longer look like a detail.

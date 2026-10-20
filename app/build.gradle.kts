@@ -17,6 +17,32 @@ val realtimeKeyAgency = buildSetting("REALTIME_KEY_AGENCY", "realtime.keyAgency"
 // The older property, still honoured: it always held an STM key.
 val legacyRealtimeKey = buildSetting("STM_API_KEY", "stm.apiKey")
 
+// Version: versionCode is derived from versionName (major * 10000 + minor * 100 + patch), see DECISIONS.md.
+val almanakVersion = "1.0.0"
+val almanakVersionCode = run {
+    val (major, minor, patch) = requireNotNull(Regex("""(\d+)\.(\d+)\.(\d+)""").matchEntire(almanakVersion)) {
+        "versionName $almanakVersion: must be MAJOR.MINOR.PATCH"
+    }.destructured.toList().map(String::toInt)
+    require(minor < 100 && patch < 100) { "versionName $almanakVersion: minor and patch must stay below 100" }
+    major * 10000 + minor * 100 + patch
+}
+
+// Release signing, from the environment only (never local.properties, never the repo). All four set: the release
+// APK is signed with that key. None set: the release APK stays unsigned (app-release-unsigned.apk), never signed
+// with a debug key. Some set: the build fails, so a half-configured CI cannot ship an unsigned or wrong APK.
+val releaseSigningEnv = listOf("ALMANAK_KEYSTORE", "ALMANAK_KEYSTORE_PASSWORD", "ALMANAK_KEY_ALIAS", "ALMANAK_KEY_PASSWORD")
+    .associateWith { System.getenv(it).orEmpty() }
+val releaseSigningMissing = releaseSigningEnv.filterValues { it.isEmpty() }.keys
+val releaseSigned = releaseSigningMissing.isEmpty()
+val releaseKeystore = releaseSigningEnv.getValue("ALMANAK_KEYSTORE").takeIf { it.isNotEmpty() }?.let(::file)
+// Checked when a release variant builds, so a stray variable never blocks debug builds or IDE sync.
+val releaseSigningProblem = when {
+    !releaseSigned && releaseSigningMissing.size < releaseSigningEnv.size ->
+        "Release signing is half configured: missing $releaseSigningMissing (set all four or none)"
+    releaseSigned && releaseKeystore?.isFile != true -> "ALMANAK_KEYSTORE does not point to a file: $releaseKeystore"
+    else -> null
+}
+
 android {
     namespace = "app.almanak"
     compileSdk {
@@ -27,8 +53,8 @@ android {
         applicationId = "app.almanak"
         minSdk = 28
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = almanakVersionCode
+        versionName = almanakVersion
         buildConfigField("String", "REALTIME_API_KEY", "\"$realtimeKey\"")
         buildConfigField("String", "REALTIME_KEY_AGENCY", "\"$realtimeKeyAgency\"")
         buildConfigField("String", "LEGACY_REALTIME_KEY", "\"$legacyRealtimeKey\"")
@@ -48,12 +74,34 @@ android {
         unitTests.isReturnDefaultValues = true
     }
 
+    signingConfigs {
+        if (releaseSigned) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = releaseSigningEnv.getValue("ALMANAK_KEYSTORE_PASSWORD")
+                keyAlias = releaseSigningEnv.getValue("ALMANAK_KEY_ALIAS")
+                keyPassword = releaseSigningEnv.getValue("ALMANAK_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // Explicit null: an unsigned release must never fall back to another key.
+            signingConfig = if (releaseSigned) signingConfigs.getByName("release") else null
+            // A published APK never carries an API key: the build-time realtime key is for debug builds only.
+            buildConfigField("String", "REALTIME_API_KEY", "\"\"")
+            buildConfigField("String", "REALTIME_KEY_AGENCY", "\"\"")
+            buildConfigField("String", "LEGACY_REALTIME_KEY", "\"\"")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
+}
+
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    val problem = releaseSigningProblem
+    doFirst { problem?.let { throw GradleException(it) } }
 }
 
 kotlin {

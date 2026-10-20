@@ -1,11 +1,12 @@
 # Almanak
 
 [![CI](https://github.com/algotitanhq/almanak/actions/workflows/ci.yml/badge.svg)](https://github.com/algotitanhq/almanak/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/algotitanhq/almanak)](https://github.com/algotitanhq/almanak/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **An ambient almanac for Android TV and Google TV, made to be left on**: the time, the date, the weather, the next
 bus in real time, the sun and the moon, a fact of the day, a generative sky that follows the hour, and a
-screensaver. Kotlin, Compose for TV, open data, no account, no ads.
+screensaver. Kotlin, Compose for TV, open data, no account, no ads, no tracking.
 
 <p align="center">
   <img src="docs/screens/almanak-demo.gif" width="720" alt="Demo: the Nocturne theme in Toronto, the minute ticking over and the forecast turning from five days to hours, then the settings drawer opened with the remote and the theme cycled live through Minimal and Paper back to Nocturne">
@@ -30,6 +31,42 @@ screensaver. Kotlin, Compose for TV, open data, no account, no ads.
 
 The UI comes in English, French and Spanish. A fresh install has no city, network or stop: weather, sun, moon and
 sky start from the TV's time zone (the city it is named after, shown as "Paris · time zone") until a city is set.
+
+## Install
+
+Almanak is not on the Play Store: each version is a signed APK on
+[GitHub Releases](https://github.com/algotitanhq/almanak/releases/latest), to sideload. It runs on Android TV and
+Google TV with Android 9 or later (NVIDIA Shield, Chromecast with Google TV, Google TV sets).
+
+1. Download `almanak-<version>.apk` from the [latest release](https://github.com/algotitanhq/almanak/releases/latest).
+   To check the file, compare `sha256sum almanak-<version>.apk` with the release's `SHA256SUMS`, and the signing
+   certificate (`apksigner verify --print-certs almanak-<version>.apk`) with the SHA-256 in the release notes.
+2. Put it on the TV, either way:
+   - **From a computer with adb.** On the TV: Settings → Device Preferences → About → press *Build* seven times,
+     then Developer options → **Network debugging** (or USB debugging). Then:
+     ```sh
+     adb connect <tv-ip>:5555                  # accept the prompt on the TV the first time
+     adb install almanak-<version>.apk
+     ```
+   - **With a file manager on the TV.** Copy the APK to the TV (a USB stick, a network share or a cloud drive),
+     open it in a file manager app, and allow that app to install unknown apps when the TV asks
+     (Settings → Apps → Security & restrictions → Unknown sources on most TVs).
+3. Open **Almanak** from the TV's app row, then follow the setup QR code (see [Configuration](#configuration)).
+
+**Updating.** Install the newer APK the same way (`adb install -r almanak-<version>.apk`, or open it in the file
+manager): the settings are kept. Releases are all signed with the same key, so updates install over the previous
+version. A build you made yourself, or one signed with another key, cannot update a release: Android refuses it
+until that app is uninstalled, which also clears its settings.
+
+## Privacy
+
+No account, no ads, no analytics, no crash reporting, no tracking. Settings stay on the TV. Almanak only talks to:
+
+- [Open-Meteo](https://open-meteo.com) for the weather (with the city's coordinates) and the city search;
+- your transit network's GTFS and GTFS-realtime feeds (or the [Mobility Database](https://mobilitydatabase.org)
+  mirror), with your realtime key if the network needs one;
+- Wikimedia for "on this day" and the picture of the day, and the image URL you set, if any;
+- your phone, on your own network, while the setup page is open.
 
 ## Screenshots
 
@@ -63,21 +100,25 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties    # your SDK path; local.pr
 ./gradlew assembleDebug testDebugUnitTest
 ```
 
-`./gradlew assembleRelease` gives an R8-minified APK (about 4 MB): sign it with your own key (`apksigner`) before
-installing. The repository ships no signing key.
+`./gradlew assembleRelease` gives an R8-minified APK (about 4 MB), unsigned
+(`app/build/outputs/apk/release/app-release-unsigned.apk`): sign it with your own key (`apksigner`) before
+installing. To sign it in the build, export all four of `ALMANAK_KEYSTORE` (path to the keystore),
+`ALMANAK_KEYSTORE_PASSWORD`, `ALMANAK_KEY_ALIAS` and `ALMANAK_KEY_PASSWORD`; with only some of them set, release
+builds fail (debug builds are not affected). The repository ships no signing key; releases are built and signed by
+[`.github/workflows/release.yml`](.github/workflows/release.yml) from a tag.
 
-### Sideload on the TV
+### Run your build on the TV
 
-On the TV: Settings → Device Preferences → About → press *Build* seven times, then Developer options →
-**Network debugging** (or USB debugging). Then, from the computer:
+With network debugging on (see [Install](#install)):
 
 ```sh
-adb connect <tv-ip>:5555          # accept the prompt on the TV the first time
+adb connect <tv-ip>:5555
 ./gradlew installDebug
 adb shell am start -n app.almanak/.MainActivity
 ```
 
-Almanak appears in the TV's app row (Leanback launcher).
+A debug build is signed with your own debug key: to try it on a TV that has the release installed, uninstall
+the release first (its settings are lost).
 
 ## Configuration
 
@@ -112,7 +153,7 @@ the next 2 hours shows its next timetable departure ("tomorrow 6:47"). Trips tha
 
 Without a key, bus times are the published schedule (shown muted, with "scheduled times"). Networks whose feed
 needs a key link their developer portal from the phone page; paste the key there at any time. To bake one into a
-build instead, add it to `local.properties` (or export `REALTIME_API_KEY` and `REALTIME_KEY_AGENCY`):
+debug build instead, add it to `local.properties` (or export `REALTIME_API_KEY` and `REALTIME_KEY_AGENCY`):
 
 ```properties
 # A GTFS-realtime key for one network only (its id in settings/Transit.kt). One per line: no trailing comments.
@@ -121,7 +162,7 @@ realtime.keyAgency=octranspo
 ```
 
 A build-time key is only ever sent to the network named in `realtime.keyAgency`. The older `stm.apiKey` /
-`STM_API_KEY` still works and means an STM key.
+`STM_API_KEY` still works and means an STM key. Release builds ignore all of them: a published APK carries no key.
 
 ### VPN and realtime feeds
 
@@ -216,7 +257,8 @@ Built in vertical slices, each one run and checked on an NVIDIA Shield (Android 
   phone setup page.
 - ✅ **Neutral defaults**: no city or network until you choose; time zone place, regional locale.
 - ✅ **CI**: build and unit tests on every push and pull request.
-- 🔜 Signed releases built by CI, and a soak test of 24 hours on the device.
+- ✅ **1.0.0**: signed releases built by CI from a tag ([CHANGELOG](CHANGELOG.md)).
+- 🔜 A soak test of 24 hours on the device.
 
 State, measures and open debts: [REPORT.md](REPORT.md).
 

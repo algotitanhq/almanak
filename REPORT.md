@@ -106,8 +106,8 @@ complete.
   key.
 - **Lint in CI.** Left out on purpose. DECISIONS "CI" says lint would fail on existing warnings. The README still
   lists `./gradlew testDebugUnitTest lintDebug` as the local loop.
-- **Instrumented / UI tests, release job, signing, Play Store.** Out of scope (DECISIONS "CI"). The README says to sign
-  the release APK with your own key.
+- **Instrumented / UI tests, Play Store.** Out of scope (DECISIONS "CI"). Signing and the release job came with
+  v1.0.0 (section 9).
 - **Google TV.** The README gives the adb steps for the screensaver. No capture or decision entry records a run on a
   Google TV device.
 
@@ -155,7 +155,8 @@ complete.
   either put it in `local.properties` / `STM_API_KEY` for builds, or paste it in the phone setup page.
 - **NordVPN on the Shield.** Exclude Almanak through split tunnelling (README "VPN on the TV"), or accept
   scheduled-only times.
-- **Release signing.** Hold the signing key and sign any release APK (README "Release build").
+- **Release signing.** Take the upload key off the VM, back it up and set the four Actions secrets (section 9,
+  ALG-111 `key-handoff` document).
 - **Shield screensaver.** Decide whether to keep Almanak as the screensaver or restore the values recorded in
   DECISIONS "Slice 6". Agents touch the Shield only when an issue says it is free.
 - **Public mirror.** Decide if one is ever wanted. Only he can approve publishing and choose how to clean it (see
@@ -274,6 +275,8 @@ Steps for B, if storagebits prefers it (never on the shared clone):
 
 ### Gate 3: first tag and GitHub release
 
+*Superseded by section 9 (ALG-111): a tag runs `.github/workflows/release.yml`.*
+
 1. Decide the version: `versionName = "0.1.0"`, `versionCode = 1` (`app/build.gradle.kts`).
 2. Build and sign the release APK on the machine that holds the key (Gate 4):
    `./gradlew assembleRelease`, then
@@ -287,6 +290,8 @@ Steps for B, if storagebits prefers it (never on the shared clone):
 
 ### Gate 4: release signing key (T3, storagebits)
 
+*Superseded by section 9 (ALG-111): the upload key was generated on the Almanak forge VM, and CI signs releases.*
+
 - **Today.** The repo has no signing config; the APK on the Shield is signed with the forge's debug keystore
   (`~/.android/debug.keystore` on the Almanak forge VM), which must never be used for a public release.
 - **Create.** On storagebits's own computer:
@@ -297,3 +302,108 @@ Steps for B, if storagebits prefers it (never on the shared clone):
   release workflow triggered by tags; this changes "no secret in CI", so it is its own decision.
 - **Shield.** Android refuses an update signed by another key: switching the Shield to the release build means
   uninstalling the debug-signed app (settings are lost) — storagebits does it himself, agents never uninstall.
+
+## 9. v1.0.0 release build (ALG-111, 2026-10-20)
+
+Branch `release/v1.0.0`. Choices in DECISIONS "v1.0.0 release". Nothing is tagged or published here: the export to
+the public repo and the tag are a separate issue, after storagebits's release card.
+
+### What works, with evidence
+
+- **Signed release build.** `assembleRelease` with the four `ALMANAK_*` variables gives `app-release.apk`, signed
+  with the new upload key; with none it gives `app-release-unsigned.apk` (`apksigner verify`: "DOES NOT VERIFY",
+  no signature at all); with only some, `assembleRelease` fails with "Release signing is half configured: missing
+  […]" while `assembleDebug` still builds. With `REALTIME_API_KEY` set, the key is in the debug dex and not in the
+  release dex.
+- **`apksigner verify --print-certs`** on the APK built from `97c085f` on the forge VM:
+
+  ```
+  Verifies
+  Verified using v2 scheme (APK Signature Scheme v2): true
+  Signer #1 certificate DN: CN=Almanak, O=ALGOTITAN
+  Signer #1 certificate SHA-256 digest: 401bc0c3cedd1217e82a1dd41d786893f47936eaee8dd22716f8416a715b6960
+  Signer #1 key algorithm: RSA
+  Signer #1 key size (bits): 4096
+  ```
+
+  `aapt2 dump badging`: `versionCode='10000' versionName='1.0.0'`.
+- **Installs over nothing and runs.** On the Android TV emulator (API 34, 1080p), with no Almanak installed:
+  `adb install` → Success, first launch shows the welcome card, the clock, Open-Meteo weather and "on this day";
+  the settings drawer opens with OK; the picture of the day loads with its credit; the setup server answers 403
+  without the pairing token. No `FATAL` or `AndroidRuntime` line in logcat. Capture `shots/alg111-emulator-release.png`
+  (local, not committed).
+- **R8 does not break realtime.** The GTFS-realtime parser uses full protobuf, which R8 renames. On the emulator,
+  `dalvikvm` ran the installed minified APK's own `RealtimeSource.parse` (found through `mapping.txt`) on a live
+  MBTA TripUpdates feed (608 KB): 1 215 trips parsed, with stop sequences, times and SKIPPED flags. No keep rule
+  was needed.
+- **On the Shield (Android 11).** The same R8 release, signed with the forge's debug key so it updates the
+  installed app in place, was installed on 2026-10-19 (`versionName 1.0.0`, `versionCode 10000`):
+  settings kept, clock, weather, the bus block with scheduled times (no valid STM key, section 4) and "on this
+  day" in Spanish. Capture `shots/alg111-shield-r8.png` (local only: it shows a configured stop's lines). The
+  build signed with the new key cannot go on the Shield until storagebits uninstalls the debug-signed app (agents
+  never uninstall): Android refuses an update signed by another key.
+- **Unit tests.** `./gradlew assembleRelease testDebugUnitTest`: 61 tests, 0 failures.
+- **Release workflow.** `.github/workflows/release.yml`, see DECISIONS. Not run yet: the secrets live only on the
+  public repo after storagebits's hand-off, and a `workflow_dispatch` dry run needs the file on the default branch.
+  `actionlint` 1.7.12 reports nothing; its shell steps (version read, CHANGELOG extraction, date check) were run
+  locally against this tree.
+- **Signer pinned.** The workflow's Verify step fails unless the APK has exactly one signer whose certificate
+  SHA-256 is the upload key's (`EXPECTED_SIGNER`), and no rotation signer or source stamp. Its shell was run locally: the new-key APK passes; the same APK
+  re-signed with a debug key fails.
+- **Export script.** `tools/publish.sh` builds the mirror's export commit from `git archive HEAD` and scans that
+  tree with gitleaks (its own config: the tree cannot silence it) and `tools/publish_scan.py` (forbidden paths such
+  as `shots/` and key files, private/CGNAT/link-local IPs, internal hostnames and home paths, personal e-mails,
+  symlinks, binary strings, PNG text chunks, EXIF GPS and device tags). On this branch: scan clean, one commit
+  prepared on top of the mirror's `8ab7361` with only this PR's files changed, nothing pushed. In a scratch clone
+  with a local mirror, each planted case exits 1 before any commit with a `HIT` line (rule and file:line): a
+  GitHub token, the same token with a `.gitleaks.toml` allow-all and with an inline allow marker, a LAN address
+  after an allowed emulator address, a file name containing `:`, a home path without a trailing slash, a symlink to a
+  keystore, a UTF-16 file, `Upload.JKS`, `id_ed25519`, `keystore.properties`, `upload.p8`, look-alike no-reply
+  e-mails, a PNG whose compressed comment holds a hostname; a dirty tree exits 1 too. The mirror guard stops on
+  a commit made on the mirror, also when its subject imitates an export ("Almanak v1.0.0 docs"), and accepts an
+  export it made itself (same tree: "nothing to export"). storagebits's README commit on the mirror and the import's
+  scrubs (no default `ALMANAK_DEVICE`, no LAN address in DECISIONS) are ported here, so the export keeps them.
+- **Docs.** `CHANGELOG.md` (Keep a Changelog; the workflow refuses an undated section on a tag; dated in ALG-113). README: *Install* from Releases (adb or a file manager, checksum and certificate check,
+  updates), *Privacy*, links to the public repo. All six images in `docs/screens/` re-checked: every QR code
+  (the two PNGs and 73 GIF frames) decodes to the placeholder `http://192.0.2.10:8737/`; no bus, stop, LAN address,
+  host name or SSID.
+
+### Measures
+
+| | |
+|---|---|
+| Signed release APK | 4 282 853 bytes (4.1 MB), R8-minified |
+| Unsigned release APK | 4 270 565 bytes |
+| `clean assembleRelease --no-build-cache`, warm daemon, forge VM | 73 s (2.6 s from the build cache) |
+
+### Open items (before the release card)
+
+- **New-key APK on the Shield (acceptance criterion, not met yet).** Met on the emulator only (above). Android
+  refuses the new key over the installed debug-signed Almanak, and agents never uninstall. storagebits uninstalls
+  Almanak on the Shield (settings are lost), then an agent installs the new-key release, captures it running and
+  adds the capture and `apksigner` line here; the release card waits for that check.
+  Status 2026-10-20 (ALG-113): still open, the only one. storagebits's card on ALG-110 (key backup, Shield
+  uninstall) is not answered yet.
+
+### Publish prep (ALG-113, 2026-10-20)
+
+- PR #5 merged into `main` at its approved head `0d94a93` (merge `1f64729`).
+- Release-gate NITs fixed: export author `Almanak contributors <release@almanak.invalid>` (the only project address
+  the scanner allows; the old `.dev` one is a hit); a gitleaks hit lists `HIT [gitleaks:<rule>] file:line` from its
+  JSON report, never the secret. Checked in a scratch worktree: a planted `ghp_` token in `docs/x/le ak.txt` gives
+  `HIT [gitleaks:github-pat] docs/x/le ak.txt:1`, exit 1, nothing committed; a missing or empty report prints
+  "unreadable"/falls back to gitleaks' redacted log.
+- **`tools/publish.sh` dry run** on the head of `release/v1.0.0-prep` (its tree is the new `main`'s after the
+  merge): scan clean; the mirror guard stops on storagebits's ported `8ab7361` as designed; with
+  `--ported 8ab7361…` exit 0, export commit prepared on `8ab7361` (10 files changed),
+  nothing pushed. Mirror checked: public, `main` = `8ab7361`, only `ci.yml` in its workflows.
+- The exact publish commands and their rollbacks: ALG-113 document `publish-plan`.
+
+### Debts
+
+- The workflow's first real run is the dry run on the public repo, after the secrets are set: the export issue
+  should start with it (`gh workflow run release.yml`), before any tag.
+- `CHANGELOG.md` is dated `2026-10-20` (ALG-113); if the tag is pushed on another day, the publish issue fixes it
+  first (DECISIONS "v1.0.0 publish prep").
+- The key hand-off (backup, environment and secrets on the public repo) is pending: ALG-111 `key-handoff`.
+
