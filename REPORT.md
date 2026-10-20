@@ -128,7 +128,7 @@ complete.
 - **Device-only failures.** Several bugs appeared only on the Shield: a Java 9 API crash on API 30 (slice 4), a
   dream lifecycle crash (slice 6), and BACK needing two presses (slice 7). CI runs JVM unit tests only, so this class
   of bug still needs a device pass.
-- **Realtime may be filtered.** The Shield runs NordVPN, and stm.info returned HTTP 441 through it. The static schedule
+- **Realtime may be filtered.** The test TV runs a VPN, and stm.info returned HTTP 441 through it. The static schedule
   falls back to a mirror, but realtime has none (DECISIONS "Slice 3", README "VPN on the TV").
 - **Shield settings changed in slice 6.** The screensaver was set to Almanak for the soak test. The before and after
   values are recorded in DECISIONS "Slice 6", and no entry records a revert.
@@ -153,7 +153,7 @@ complete.
 
 - **STM key.** Publish a working key on the STM developer portal (Save, then Publish; README "Configuration"). Then
   either put it in `local.properties` / `STM_API_KEY` for builds, or paste it in the phone setup page.
-- **NordVPN on the Shield.** Exclude Almanak through split tunnelling (README "VPN on the TV"), or accept
+- **VPN on the test TV.** Exclude Almanak through split tunnelling (README "VPN on the TV"), or accept
   scheduled-only times.
 - **Release signing.** Take the upload key off the VM, back it up and set the four Actions secrets (section 9,
   ALG-111 `key-handoff` document).
@@ -199,31 +199,17 @@ tag, no release, no history rewrite, no force push. Each gate decision is storag
 A targeted search for `stm.apiKey=` lines added in history found three, all placeholders (README and
 `DECISIONS.md`, commits `8cf509a`, `7b3ba4d`). No API key, password or token is in the history.
 
-### Privacy scan of history (what a public repo with full history would expose)
+### Privacy scan of history
 
-- **Captures.** 69 files ever tracked under `shots/` (68 PNG captures and `shots/soak/soak.csv`), taken on the
-  home TV. They remain in every commit up to `e9aa0a4`.
-- **Commit messages naming the home stop or intersection.** 2 commits: `a6f0c9f` (subject), `c30104c` (body).
-- **File contents naming the home stops or nearby streets.** Added or changed in 9 commits: `8cf509a`, `a6f0c9f`,
-  `4778b36`, `bcc3631`, `c30104c`, `61f85d8`, `2da3929`, `e1877b9`, `3dd209d`. The current tree has none
-  (this branch).
-- **Author metadata.** 18 commits carry storagebits's personal e-mail address as author and committer. The other
-  10 use the agents' identity or the GitHub App's noreply address.
-- **LAN address.** The Shield's private address (RFC 1918) is the default in `tools/shot.sh`, `tools/soak.sh`
-  and appears in `DECISIONS.md` (tree and history). Kept: it cannot be reached from outside the LAN, and the
-  agents' tools rely on it (DECISIONS "Publishing scan").
-- **Forge hostname.** The internal hostname of the Almanak forge VM is in `REPORT.md` in 1 commit (`0f73b17`,
-  ALG-56). The current tree has none (ALG-62); the clean import of Gate 1 drops it.
-- **Coordinates.** Only downtown Montréal (city centre, the Open-Meteo test fixture). No home coordinates found.
-- No file was ever tracked and later deleted: every path in history is still in the tree, except `shots/` after
-  this branch.
+The private history holds personal data (old captures, the home stops, a personal e-mail) and is not published:
+the public repo gets scanned exports of the tree only (Gate 1 option A, then `tools/publish.sh`).
 
 ### Gate 1: clean public repo or history purge
 
 | | A. Clean public repo (recommended) | B. History purge |
 |---|---|---|
 | What | New repo, one commit importing the current tree (without `shots/`) | `git filter-repo` on a copy, then force push to `storagebits/almanak` |
-| Exposure | None of the history above | Only what the filters catch; the commit `a6f0c9f` subject, the author e-mail and every past capture each need a rule |
+| Exposure | None of the history above | Only what the filters catch; a commit subject, the author e-mail and every past capture each need a rule |
 | Risk | Low: the private repo stays untouched as the archive | Rewrites shared `main`; every clone (forge, Paperclip workspaces) must be re-cloned; open PR refs and old SHAs in issues and `DECISIONS.md` break; GitHub keeps cached views of old commits until support purges them |
 | Loss | Public history starts at 0.1.0 | None for the public, but SHAs change |
 
@@ -384,6 +370,16 @@ the public repo and the tag are a separate issue, after storagebits's release ca
   adds the capture and `apksigner` line here; the release card waits for that check.
   Status 2026-10-20 (ALG-113): still open, the only one. storagebits's card on ALG-110 (key backup, Shield
   uninstall) is not answered yet.
+  Status 2026-10-20 (ALG-118): **closed.** After storagebits's key hand-off, the public repo's Release workflow
+  ran on `workflow_dispatch` off the export `e6c1d36` (run 39495633615, success, publish job skipped as designed).
+  Its artifact `almanak-1.0.0.apk` (4 282 853 bytes) matches its `SHA256SUMS`, and `apksigner verify
+  --print-certs` gives v2 only, `CN=Almanak, O=ALGOTITAN`, SHA-256 `401bc0c3…a715b6960`. On the Shield, at 17:10
+  Montréal (nothing playing), the debug-signed Almanak (signer `72cba87b…`) was uninstalled, and this APK was
+  installed and launched: `versionName 1.0.0`, `versionCode 10000`; the APK pulled back from the device is
+  byte-identical to the artifact and has the same signer; `MainActivity` stays in the foreground, showing the
+  clock, the date, sunrise and sunset, the weather with its hourly strip, and the welcome card with the setup QR
+  code (a fresh install: settings gone, as expected). Capture `shots/alg118-shield-release.png` (local only: its
+  QR code holds the Shield's LAN setup address).
 
 ### Publish prep (ALG-113, 2026-10-20)
 
@@ -402,7 +398,8 @@ the public repo and the tag are a separate issue, after storagebits's release ca
 ### Debts
 
 - The workflow's first real run is the dry run on the public repo, after the secrets are set: the export issue
-  should start with it (`gh workflow run release.yml`), before any tag.
+  should start with it (`gh workflow run release.yml`), before any tag. Done in ALG-118 (run 39495633615, green);
+  the agents' GitHub App cannot dispatch it (403, no *Actions: write*), so storagebits started it by hand.
 - `CHANGELOG.md` is dated `2026-10-20` (ALG-113); if the tag is pushed on another day, the publish issue fixes it
   first (DECISIONS "v1.0.0 publish prep").
 - The key hand-off (backup, environment and secrets on the public repo) is pending: ALG-111 `key-handoff`.

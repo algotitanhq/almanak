@@ -143,8 +143,8 @@ class SetupServer(private val handler: suspend (HttpRequest) -> HttpResponse) {
         }
 
         /**
-         * The TV's address on the local network. Skips VPN tunnels: on the Shield the default route is a NordVPN
-         * tun0 (10.5.x.x), which a phone on the Wi-Fi can't reach.
+         * The TV's address on the local network. Skips VPN tunnels: with a VPN on the TV the default route is a
+         * tunnel, which a phone on the Wi-Fi can't reach.
          */
         fun lanAddress(): String? = NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
             .filter { it.isUp && !it.isLoopback && !it.isVirtual && !it.name.startsWith("tun") && !it.name.startsWith("ppp") }

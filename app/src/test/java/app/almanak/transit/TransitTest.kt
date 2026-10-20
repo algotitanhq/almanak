@@ -28,8 +28,8 @@ class TransitTest {
     private val feed = mapOf(
         // BOM on the first header, as some producers emit; quoted name with a comma.
         "stops.txt" to "\uFEFFstop_id,stop_name\nA,\"Maple / Elm, est\"\nB,Elsewhere\n",
-        "routes.txt" to "route_id,route_short_name,route_color\n160,160,781B7D\n51,51,009EE0\n",
-        "trips.txt" to "route_id,service_id,trip_id,trip_headsign\n160,WK,t1,Est\n160,WK,t2,Est\n51,WK,t3,Ouest\n160,SAT,t4,Est\n",
+        "routes.txt" to "route_id,route_short_name,route_color\n100,100,112233\n200,200,445566\n",
+        "trips.txt" to "route_id,service_id,trip_id,trip_headsign\n100,WK,t1,North\n100,WK,t2,North\n200,WK,t3,South\n100,SAT,t4,North\n",
         "stop_times.txt" to "trip_id,arrival_time,departure_time,stop_id,stop_sequence\n" +
             "t1,08:00:00,08:00:00,A,5\nt2,25:10:00,25:10:00,A,5\nt3,08:05:00,08:05:00,A,3\nt4,09:00:00,09:00:00,A,5\nt1,08:10:00,08:10:00,B,6\n",
         "calendar.txt" to "service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n" +
@@ -38,14 +38,14 @@ class TransitTest {
         "feed_info.txt" to "feed_publisher_name,feed_version,feed_end_date\nSTM,v1,20261025\n",
     )
 
-    private fun schedule(routes: Set<String> = setOf("160")) = GtfsExtractor.extract(zip(feed), setOf("A"), routes)
-    private val A160 = LineKey("A", "160", "Est")
+    private fun schedule(routes: Set<String> = setOf("100")) = GtfsExtractor.extract(zip(feed), setOf("A"), routes)
+    private val A100 = LineKey("A", "100", "North")
 
     @Test fun `extracts only the selected stop and routes`() {
         val s = schedule()
         assertEquals(listOf("t1", "t4", "t2"), s.departures.map { it.tripId })
         assertEquals("Maple / Elm, est", s.stops["A"])
-        assertEquals("781B7D", s.routes["160"]!!.color)
+        assertEquals("112233", s.routes["100"]!!.color)
         assertEquals(setOf("WK", "SAT"), s.services.keys)
         assertEquals(LocalDate.of(2026, 10, 25), s.feedEnd)
         assertEquals(90_600, s.departures.last().seconds)
@@ -66,18 +66,18 @@ class TransitTest {
     @Test fun `next departure beyond the horizon, across nights, weekends and holidays`() {
         val s = schedule()
         // Thursday 10:00: next is Thursday's 25:10 trip, i.e. Friday 01:10.
-        assertEquals(at(9, 1, 10).toInstant(), Departures.next(s, A160, at(8, 10, 0)))
+        assertEquals(at(9, 1, 10).toInstant(), Departures.next(s, A100, at(8, 10, 0)))
         // Friday 02:00: Friday's 08:00.
-        assertEquals(at(9, 8, 0).toInstant(), Departures.next(s, A160, at(9, 2, 0)))
+        assertEquals(at(9, 8, 0).toInstant(), Departures.next(s, A100, at(9, 2, 0)))
         // Saturday 10:00: nothing Sunday; Monday the 12th is a holiday running the Saturday service (09:00).
-        assertEquals(at(12, 9, 0).toInstant(), Departures.next(s, A160, at(10, 10, 0)))
-        assertNull(Departures.next(s, LineKey("A", "999", "Est"), at(8, 10, 0)))
+        assertEquals(at(12, 9, 0).toInstant(), Departures.next(s, A100, at(10, 10, 0)))
+        assertNull(Departures.next(s, LineKey("A", "999", "North"), at(8, 10, 0)))
     }
 
     @Test fun `each direction at a stop is its own line`() {
         val up = Departures.upcoming(schedule(emptySet()), null, at(8, 7, 50))
-        assertEquals(setOf(A160, LineKey("A", "51", "Ouest")), up.keys)
-        assertEquals(listOf("t3"), up.getValue(LineKey("A", "51", "Ouest")).map { it.tripId })
+        assertEquals(setOf(A100, LineKey("A", "200", "South")), up.keys)
+        assertEquals(listOf("t3"), up.getValue(LineKey("A", "200", "South")).map { it.tripId })
     }
 
     @Test fun `calendar exceptions win over weekdays`() {
@@ -93,16 +93,16 @@ class TransitTest {
 
     @Test fun `scheduled departures in order, past ones dropped`() {
         // t2 (01:10 next day) is beyond the 2 h horizon.
-        val up = Departures.upcoming(schedule(), null, at(8, 7, 50))[A160]!!
+        val up = Departures.upcoming(schedule(), null, at(8, 7, 50))[A100]!!
         assertEquals(listOf("t1"), up.map { it.tripId })
         assertEquals(at(8, 8, 0).toInstant(), up[0].at)
         assertFalse(up[0].realtime)
-        assertTrue(Departures.upcoming(schedule(), null, at(8, 8, 1))[A160].orEmpty().none { it.tripId == "t1" })
+        assertTrue(Departures.upcoming(schedule(), null, at(8, 8, 1))[A100].orEmpty().none { it.tripId == "t1" })
     }
 
     @Test fun `after-midnight trips belong to the previous service day`() {
         // t2 at 25:10 on Thursday's service = Friday 01:10.
-        val up = Departures.upcoming(schedule(), null, at(9, 1, 0))[A160]!!
+        val up = Departures.upcoming(schedule(), null, at(9, 1, 0))[A100]!!
         assertEquals("t2", up.first().tripId)
         assertEquals(at(9, 1, 10).toInstant(), up.first().at)
     }
@@ -113,37 +113,37 @@ class TransitTest {
     @Test fun `realtime delay, exact time, cancellation`() {
         val now = at(8, 7, 50)
         val s = schedule()
-        val delayed = Departures.upcoming(s, rt(now, "t1" to RtTrip(false, listOf(RtStopUpdate(5, "A", null, 180, false)))), now)[A160]!!
+        val delayed = Departures.upcoming(s, rt(now, "t1" to RtTrip(false, listOf(RtStopUpdate(5, "A", null, 180, false)))), now)[A100]!!
         assertEquals(at(8, 8, 3).toInstant(), delayed[0].at)
         assertTrue(delayed[0].realtime)
 
         val exact = at(8, 7, 58).toEpochSecond()
-        assertEquals(at(8, 7, 58).toInstant(), Departures.upcoming(s, rt(now, "t1" to RtTrip(false, listOf(RtStopUpdate(5, null, exact, null, false)))), now)[A160]!![0].at)
+        assertEquals(at(8, 7, 58).toInstant(), Departures.upcoming(s, rt(now, "t1" to RtTrip(false, listOf(RtStopUpdate(5, null, exact, null, false)))), now)[A100]!![0].at)
 
-        val canceled = Departures.upcoming(s, rt(now, "t1" to RtTrip(true, emptyList())), now)[A160].orEmpty()
+        val canceled = Departures.upcoming(s, rt(now, "t1" to RtTrip(true, emptyList())), now)[A100].orEmpty()
         assertTrue(canceled.none { it.tripId == "t1" })
 
-        val skipped = Departures.upcoming(s, rt(now, "t1" to RtTrip(false, listOf(RtStopUpdate(5, "A", null, null, true)))), now)[A160].orEmpty()
+        val skipped = Departures.upcoming(s, rt(now, "t1" to RtTrip(false, listOf(RtStopUpdate(5, "A", null, null, true)))), now)[A100].orEmpty()
         assertTrue(skipped.none { it.tripId == "t1" })
     }
 
     @Test fun `upstream delay propagates to our stop`() {
         val now = at(8, 7, 50)
-        val up = Departures.upcoming(schedule(), rt(now, "t1" to RtTrip(false, listOf(RtStopUpdate(2, "X", null, 240, false)))), now)[A160]!!
+        val up = Departures.upcoming(schedule(), rt(now, "t1" to RtTrip(false, listOf(RtStopUpdate(2, "X", null, 240, false)))), now)[A100]!!
         assertEquals(at(8, 8, 4).toInstant(), up[0].at)
         assertTrue(up[0].realtime)
     }
 
     @Test fun `a late bus stays visible after its scheduled time`() {
         val now = at(8, 8, 2)
-        val up = Departures.upcoming(schedule(), rt(now, "t1" to RtTrip(false, listOf(RtStopUpdate(5, "A", null, 300, false)))), now)[A160]!!
+        val up = Departures.upcoming(schedule(), rt(now, "t1" to RtTrip(false, listOf(RtStopUpdate(5, "A", null, 300, false)))), now)[A100]!!
         assertEquals("t1", up[0].tripId)
     }
 
     @Test fun `stale realtime is ignored`() {
         val now = at(8, 7, 50)
         val old = RtSnapshot(now.minusMinutes(5).toInstant().toEpochMilli(), mapOf("t1" to RtTrip(true, emptyList())))
-        val up = Departures.upcoming(schedule(), old, now)[A160]!!
+        val up = Departures.upcoming(schedule(), old, now)[A100]!!
         assertEquals("t1", up[0].tripId)
         assertFalse(up[0].realtime)
     }

@@ -17,12 +17,12 @@ class SettingsTest {
         val messy = Settings(
             language = "de",
             stops = listOf(" 10001", "10001", "", "1", "2", "3", "4", "5", "6"),
-            routes = listOf(" 160 ", ""),
+            routes = listOf(" 100 ", ""),
             modules = listOf(ModuleSetting(Module.Bus, zone = Zone.UnderClock)), // bus can't sit under the date
         ).normalized()
         assertEquals("en", messy.language)
         assertEquals(listOf("10001", "1", "2", "3", "4", "5"), messy.stops)
-        assertEquals(listOf("160"), messy.routes)
+        assertEquals(listOf("100"), messy.routes)
         assertEquals(Zone.Right, messy.module(Module.Bus).zone)
         // Bus first (as given), then the missing ones in default order.
         assertEquals(listOf(Module.Bus, Module.Almanac, Module.Weather), messy.modules.map { it.module })
@@ -36,7 +36,7 @@ class SettingsTest {
 
     /** settings.json exactly as main @ 20ced4b writes it (encodeDefaults): Montréal and the STM spelled out. */
     private val schema1File = """{"theme":"Nocturne","language":"fr","unit":"Celsius",
-        "city":{"name":"Montréal","lat":45.5019,"lon":-73.5674},"stops":["10001","10003"],"routes":["160"],
+        "city":{"name":"Montréal","lat":45.5019,"lon":-73.5674},"stops":["10001","10003"],"routes":["100"],
         "wallpaper":"Sky","wallpaperUrl":"",
         "modules":[{"module":"Almanac","enabled":true,"zone":"UnderClock","size":"Medium"},{"module":"Bus","enabled":true,"zone":"Right","size":"Medium"},{"module":"Weather","enabled":true,"zone":"Bottom","size":"Medium"}],
         "agency":{"id":"stm","name":"STM · Montréal","gtfsUrls":["https://www.stm.info/sites/default/files/gtfs/gtfs_stm.zip","https://files.mobilitydatabase.org/mdb-2126/latest.zip"],"realtimeUrl":"https://api.stm.info/pub/od/gtfs-rt/ic/v2/tripUpdates","keyName":"apikey","keyIn":"Header","keyHelp":"https://portail.developpeurs.stm.info/apihub/"},

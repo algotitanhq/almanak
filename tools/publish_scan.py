@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Scans an exported tree for what must not reach the public mirror (called by tools/publish.sh).
 
-    python3 -I tools/publish_scan.py <tree>
+    python3 -I tools/publish_scan.py [--private-patterns <file>] <tree>
     python3 -I tools/publish_scan.py --gitleaks-report <report.json> <tree>
 
 Prints one line per hit, "HIT [rule] path[:line]", never the matched value. Exit 0: clean, 1: hits, 2: usage,
@@ -9,6 +9,9 @@ Prints one line per hit, "HIT [rule] path[:line]", never the matched value. Exit
 scanned through their printable strings (ASCII and UTF-16LE), PNG text chunks included (zTXt and iTXt inflated).
 With --gitleaks-report, prints the findings of a gitleaks JSON report instead, one "HIT [gitleaks:rule] path:line"
 each (never the secret); exit 0 when it listed at least one, 1 when the report is missing, unreadable or empty.
+--private-patterns adds the owner's own patterns (hostnames, machine names, network products), kept out of the tree
+on purpose: one regular expression per line, a line starting with "#" is a comment, a "text:" prefix limits the line to text files
+(short names show up at random in compressed binaries). A missing, empty or invalid file exits 3.
 """
 import json
 import os
@@ -29,7 +32,7 @@ OCTET = r"(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])"
 ARCHIVE = re.compile(r"\.(gz|tgz|zip|jar|7z|tar|bz2|xz|aar|zst|rar)$", re.I)
 ALLOWED_ARCHIVES = {"gradle/wrapper/gradle-wrapper.jar"}
 
-# Private, carrier-grade NAT (100.64/10, mesh VPNs) and link-local IPv4; ULA and link-local IPv6.
+# Private, carrier-grade NAT (100.64/10) and link-local IPv4; ULA and link-local IPv6.
 PRIVATE_V4 = re.compile(
     r"(?<![0-9.])(192\.168|10\.%(o)s|172\.(1[6-9]|2[0-9]|3[01])|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])"
     r"|169\.254)\.%(o)s\.%(o)s(?![0-9])" % {"o": OCTET}
@@ -37,14 +40,14 @@ PRIVATE_V4 = re.compile(
 # 10.0.2.x is the Android emulator's fixed NAT address, the same on every machine.
 ALLOWED_V4 = re.compile(r"10\.0\.2\.%s" % OCTET)
 PRIVATE_V6 = re.compile(r"(?<![0-9A-Za-z:])(f[cd][0-9a-f]{2}|fe80):[0-9a-f]{0,4}:[0-9a-f:]*", re.I)
-# Internal hostnames of the build VMs and homelab, local DNS suffixes, mesh VPN names, home directories.
-# (Character classes such as [n] keep this file from matching its own patterns.) Hostnames are lowercase; the short
-# VM names are checked in text only (three characters show up at random in compressed image data).
-VM_NAME = re.compile(r"\b(f0[0-9]|w[0-9]{2})\b")
+# Local DNS suffixes and home directories. The owner's own hostnames and machine names are not in this file (a reader
+# would see them): they come from --private-patterns. (Character classes such as [l] keep this file from matching
+# its own patterns.)
 HOST = re.compile(
-    r"\btrito[n]\b|\b[a-z0-9-]+\.(loca[l]|la[n]|home\.arpa|interna[l])\b|\.ts\.ne[t]\b|\b[Tt]ailscal[e]\b"
+    r"\b[a-z0-9-]+\.(loca[l]|la[n]|home\.arpa|interna[l])\b"
     r"|/home/[a-z_][a-z0-9_-]*\b|/roo[t]/|/Users/[A-Za-z]|[A-Za-z]:\\Users\\"
 )
+PRIVATE, PRIVATE_TEXT = [], []
 MAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
 ALLOWED_MAIL = re.compile(r"(release@almanak\.invalid|[0-9]+\+[A-Za-z0-9-]+@users\.noreply\.github\.com"
                           r"|[^@]+@example\.(com|org|net))", re.I)
@@ -68,8 +71,10 @@ def scan_text(rel, text, located=True):
                 hit("private-ip", where)
         if PRIVATE_V6.search(line):
             hit("private-ipv6", where)
-        if HOST.search(line) or (located and VM_NAME.search(line)):
+        if HOST.search(line):
             hit("internal-host", where)
+        if any(p.search(line) for p in PRIVATE) or (located and any(p.search(line) for p in PRIVATE_TEXT)):
+            hit("private-pattern", where)
         for m in MAIL.finditer(line):
             if not ALLOWED_MAIL.fullmatch(m.group(0)):
                 hit("email", where)
@@ -204,12 +209,37 @@ def gitleaks_report(report, root):
     return 0 if hits else 1
 
 
+def load_private(path):
+    """Fills PRIVATE and PRIVATE_TEXT; raises when the file is missing, unreadable, empty or holds a bad pattern."""
+    with open(path, encoding="utf-8-sig") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("text:"):
+                PRIVATE_TEXT.append(re.compile(line[5:].strip()))
+            else:
+                PRIVATE.append(re.compile(line))
+    if not PRIVATE and not PRIVATE_TEXT:
+        raise ValueError("no pattern")
+
+
 if __name__ == "__main__":
-    if len(sys.argv) == 4 and sys.argv[1] == "--gitleaks-report":
-        sys.exit(gitleaks_report(sys.argv[2], sys.argv[3]))
-    if len(sys.argv) != 2 or not os.path.isdir(sys.argv[1]):
-        print("usage: publish_scan.py [--gitleaks-report <report.json>] <tree>", file=sys.stderr)
+    args = sys.argv[1:]
+    if len(args) == 3 and args[0] == "--gitleaks-report":
+        sys.exit(gitleaks_report(args[1], args[2]))
+    if len(args) == 3 and args[0] == "--private-patterns":
+        try:
+            load_private(args[1])
+        except Exception as e:  # never print the file's content: it is the private part
+            print("publish_scan: private patterns unusable: %s" % type(e).__name__, file=sys.stderr)
+            sys.exit(3)
+        args = args[2:]
+    if len(args) != 1 or not os.path.isdir(args[0]):
+        print("usage: publish_scan.py [--gitleaks-report <report.json> | --private-patterns <file>] <tree>",
+              file=sys.stderr)
         sys.exit(2)
+    sys.argv[1:] = args
     try:
         code = main(sys.argv[1])
     except Exception as e:  # a scan that did not finish is not a clean scan

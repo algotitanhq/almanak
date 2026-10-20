@@ -5,7 +5,9 @@
 #   tools/publish.sh --push             the same, then push it to the mirror's main (never a tag: tag by hand)
 #   tools/publish.sh --ported <sha>     the mirror's main has commits made there (not by this script) up to <sha>,
 #                                       already ported into this repo: export over them anyway
-# Env: ALMANAK_MIRROR (default https://github.com/algotitanhq/almanak.git), KEEP=1 keeps the temp dir.
+# Env: ALMANAK_MIRROR (default https://github.com/algotitanhq/almanak.git), KEEP=1 keeps the temp dir,
+#   ALMANAK_PRIVATE_PATTERNS (default ~/.config/almanak/publish-private-patterns): the owner's hostnames, machine
+#   names and the like, one regex per line, kept outside this repo so the public tree does not list them. Required.
 # Exits non-zero, before any commit or push, on: a dirty tree, a gitleaks finding, a scan hit of
 # tools/publish_scan.py (key files, shots/, private IPs, internal hostnames, home paths, personal e-mails, symlinks,
 # EXIF location or device tags), or a scan that did not finish. Matched values are never printed.
@@ -19,7 +21,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --push) PUSH=1 ;;
     --ported) PORTED="${2:?--ported needs the mirror SHA}"; shift ;;
-    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1 (see --help)" >&2; exit 2 ;;
   esac
   shift
@@ -30,6 +32,9 @@ ROOT=$PWD
 die() { echo "publish: $*" >&2; exit 1; }
 command -v gitleaks >/dev/null || die "gitleaks is not installed"
 command -v python3 >/dev/null || die "python3 is not installed"
+PRIVATE_PATTERNS="${ALMANAK_PRIVATE_PATTERNS:-$HOME/.config/almanak/publish-private-patterns}"
+[ -s "$PRIVATE_PATTERNS" ] && [ -r "$PRIVATE_PATTERNS" ] \
+  || die "no private patterns file ($PRIVATE_PATTERNS): the scan would miss the owner's hostnames"
 
 # 1. A clean HEAD: the export is HEAD's tree, so uncommitted work would be silently left out.
 git diff --quiet HEAD -- || die "uncommitted changes to tracked files; commit or stash them first"
@@ -56,7 +61,7 @@ git archive "$SRC" | tar -x -C "$WORK/tree"
 hits=0
 echo "publish: scanning the tree of ${SRC::7} (Almanak $VERSION)"
 rc=0
-python3 -I "$ROOT/tools/publish_scan.py" "$WORK/tree" >&2 || rc=$?
+python3 -I "$ROOT/tools/publish_scan.py" --private-patterns "$PRIVATE_PATTERNS" "$WORK/tree" >&2 || rc=$?
 if [ "$rc" != 0 ]; then
   hits=$((hits + 1))
   [ "$rc" = 1 ] || echo "  HIT [scan] publish_scan.py did not finish (exit $rc)" >&2

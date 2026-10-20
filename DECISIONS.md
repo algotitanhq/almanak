@@ -166,9 +166,9 @@ Then: run the screensaver for 24 h with `dumpsys meminfo` taken at the start and
 - **Polling.** 30 s while visible. A rejected key is retried every 10 min, no key means no polling, and network
   errors back off up to 5 min.
 
-### The Shield's NordVPN breaks stm.info (HTTP 441)
+### A VPN on the test TV breaks stm.info (HTTP 441)
 - **Context.** The first on-device sync failed with `HTTP 441`, while the same request from the Mac succeeded.
-  `dumpsys connectivity` shows NordVPN active on the Shield (`tun0`, all UIDs). stm.info rejects VPN exit IPs.
+  The test TV runs a VPN. stm.info rejects VPN exit IPs.
 - **Options:**
   1. bind sockets to the underlying Wi-Fi network: circumvents the user's VPN and isn't allowed without bypass;
   2. ask the user to split-tunnel;
@@ -177,7 +177,7 @@ Then: run the screensaver for 24 h with `dumpsys meminfo` taken at the start and
   `files.mobilitydatabase.org/mdb-2126/latest.zip`. It is the same feed, byte-identical in size, and needs no key.
   ETags are stored per URL.
 - **Note.** The realtime API (`api.stm.info`) may well be filtered the same way once a valid key exists. The README
-  covers excluding Almanak in NordVPN's split tunnelling.
+  covers excluding Almanak through the VPN's split tunnelling.
 
 ### STM key
 - Still rejected (`400 Invalid API Key`, see §3). The app treats this as `Unauthorized` and shows the schedule
@@ -405,8 +405,8 @@ Each theme is a palette plus two type voices. Labels and small numbers are alway
   - Bodies are capped at 64 KB, and sockets time out after 5 s.
   - The STM key is **never sent back** to the page, only `stmApiKeySet`. An empty key field means "unchanged".
   - Feed-provided names (stops, places) are rendered as text nodes, never `innerHTML`.
-- **LAN address.** The QR uses the Wi-Fi/Ethernet IPv4 and skips VPN tunnels: on the Shield the default route is
-  NordVPN's `tun0`, which a phone can't reach.
+- **LAN address.** The QR uses the Wi-Fi/Ethernet IPv4 and skips VPN tunnels: on the Shield the default route can be
+  a VPN tunnel, which a phone can't reach.
 - **Searches:**
   - Stop search reads `stops.txt` from the cached agency zip, with no network.
   - City search proxies Open-Meteo's keyless geocoder. The TV itself offers a preset list (Montréal, Québec,
@@ -576,7 +576,7 @@ STM; existing installs keep their settings.
 - **Structure.** Kronograf's: title, CI and licence badges, pitch, GIF, "What it shows", screenshots, "Getting
   started", "Configuration", "Architecture", "Project status", "Licence and credits". The device sections keep
   their content, reorganised; the LAN address of the old `adb connect` example became `<tv-ip>`.
-- **VPN.** The NordVPN / stm.info note became a generic "VPN and realtime feeds" note.
+- **VPN.** The stm.info note became a generic "VPN and realtime feeds" note.
 - **Licence.** MIT, the same text and holder as Kronograf's `LICENSE`. `third_party/DATA.md` now credits every
   network's open-data licence, not only the STM's, and the picture of the day.
 
@@ -624,7 +624,7 @@ features plus populaires ».
 - **Context.** Four unit tests and two lines of this file used the real home stop codes and the names of the
   streets at the stop. A clean import of the tree would have published them.
 - **Choice.** Replaced by neutral codes (`10001`–`10003`) and street names (`Maple`, `Elm`, `Oak`); the tests check
-  the same behaviour (61 tests, 0 failures). Route number `160` was kept: alone, it names nothing near home.
+  the same behaviour (61 tests, 0 failures). Route numbers in tests and placeholders are arbitrary.
 
 ### LAN address kept
 - **Context.** The Shield's private address is the default device of `tools/shot.sh` and `tools/soak.sh`, and is
@@ -640,15 +640,14 @@ features plus populaires ».
 ## ALG-62: REPORT cleanup (2026-10-18)
 
 - **Forge hostname.** Replaced by "the Almanak forge VM" (the only hit in the tree, `REPORT.md`); no other internal
-  host name or VLAN address is tracked. History keeps it (1 commit), listed in REPORT §8: no rewrite, the Gate 1
-  clean import drops it.
+  host name or VLAN address is tracked. The private history, which keeps it, is not
+  published.
 
 ## Clean import (ALG-78, 2026-10-19)
 
 - **Clean import.** `algotitanhq/almanak` starts from one commit importing the tree of `algotitanhq/almanak-public`
   @ `aad0d04` (ALG-89: `git archive`, neutral author, no `shots/`). That tree came from `storagebits/almanak`
-  `main` @ `3153711` (ALG-78, Gate 1 option A): the private history names the home stops, carries a personal e-mail
-  and old captures, and is not rewritten (REPORT §8). `almanak-public`'s own first commits carried the Shield's LAN
+  `main` (ALG-78, Gate 1 option A): the private history is not published. `almanak-public`'s own first commits carried the Shield's LAN
   address (ALG-88), hence this second squashed import instead of a force push.
 
 ## No default device address (ALG-88, 2026-10-19)
@@ -753,7 +752,9 @@ features plus populaires ».
   carry one; TIFF, WebP and HEIC EXIF too). Archives are not looked into, so any archive but the Gradle wrapper
   is a hit. gitleaks still reads a `.gitleaksignore` in the scanned tree whatever its flags say: such files are
   reported, then removed from the scanned copy so gitleaks runs on its default rules. Short VM names are matched in text only: a letter and two digits occur at random in
-  compressed images. Its own patterns use character classes (`trito[n]`) so the file does not match itself.
+  compressed images. Its own patterns use character classes so the file does not match itself. The owner's own hostnames and machine
+  names are not in the tree: `publish.sh` reads them from a private patterns file outside the repo (ALG-118) and
+  stops when it is missing.
 - **Allowed values.** `10.0.2.x` (the Android emulator's fixed NAT address, the same everywhere), `192.0.2.x`
   (TEST-NET-1, not private: the README's example), `release@almanak.invalid`, GitHub no-reply and example.com
   addresses. Anything else that looks like an e-mail is a hit.
