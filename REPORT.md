@@ -404,3 +404,25 @@ the public repo and the tag are a separate issue, after storagebits's release ca
   first (DECISIONS "v1.0.0 publish prep").
 - The key hand-off (backup, environment and secrets on the public repo) is pending: ALG-111 `key-handoff`.
 
+
+## GTFS: a 200 HTML page is a failed source (ALG-176, 2026-10-22)
+
+- **Bug** (ALG-175). Behind a VPN, stm.info answered `200` with a ~71 KiB HTML page; `GtfsStore` stored it as
+  `gtfs.zip`, every sync failed with `ZipException`, and the mirror was never tried: the bus block stayed empty.
+- **Fix.** `GtfsStore.downloadFrom` refuses a `text/html` response and validates `gtfs.zip.part` before the rename
+  (zip magic, opens as a zip, has `stops.txt` and `stop_times.txt`); a failure deletes the part file and moves on
+  to the next URL. The cached zip and its URL/ETag are only replaced by a valid zip (DECISIONS, "A VPN on the test
+  TV breaks stm.info", variant).
+- **Tests.** `GtfsStoreTest` (3 tests, MockWebServer): HTML page then mirror zip → the mirror's zip and ETag are
+  stored and extracted; an HTML body labelled `application/zip` → same; garbage from every source (a page, then a
+  zip without `stop_times.txt`) → `sync` returns false (so `GtfsSyncWorker` answers `Result.retry()`), the cached
+  zip and ETag are byte-identical, no part file is left. The three fail on the previous code.
+- **Emulator** (debug build, Android TV emulator, 1080p). A custom network whose first URL is a local server
+  answering every request with `200` and a 71 KiB HTML page, the STM mirror second, one STM stop:
+  - served as `text/html`: `GTFS download from … failed: … is an HTML page`, then `GTFS downloaded 65416 KiB` and
+    `GTFS extracted 1192 departures` (about 16 s); the bus block shows lines 24 and 356;
+  - served as `application/zip` (the Shield's case): `… is not a zip (71 KiB)`, then the same download, extraction
+    and bus block.
+- **Shield.** Not checked: Almanak is now excluded from the VPN by split tunnelling, so the Shield no longer
+  reproduces the bug.
+- **Debts.** None new.

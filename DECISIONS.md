@@ -178,6 +178,16 @@ Then: run the screensaver for 24 h with `dumpsys meminfo` taken at the start and
   ETags are stored per URL.
 - **Note.** The realtime API (`api.stm.info`) may well be filtered the same way once a valid key exists. The README
   covers excluding Almanak through the VPN's split tunnelling.
+- **Variant: 200 + HTML page (ALG-175, 2026-10-22).** stm.info now answers a VPN exit IP with a `200` and a ~71 KiB
+  HTML page instead of `441`. The fallback only caught HTTP errors, so the page was stored as `gtfs.zip` (with its
+  URL as the cache's source), extraction failed with `ZipException`, and the mirror was never tried. `GtfsStore`
+  now treats a body that is not a GTFS zip as a failed source, exactly like an HTTP error: a `text/html` response
+  is refused before reading, and the downloaded `gtfs.zip.part` must start with `PK\x03\x04`, open as a zip and
+  hold `stops.txt` and `stop_times.txt`. The check runs before the rename, so a bad body never replaces the cached
+  zip or its URL/ETag; the part file is always deleted. Both checks, not one: the content type is cheap but a
+  server can label a page `application/zip` (or send no type), and the zip check alone would still download the
+  whole page first. Checking every entry's CRC was rejected: it reads the whole 65 MiB feed twice for a failure
+  mode (a truncated or corrupt zip) the extractor already reports.
 
 ### STM key
 - Still rejected (`400 Invalid API Key`, see §3). The app treats this as `Unauthorized` and shows the schedule
