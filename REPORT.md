@@ -429,8 +429,11 @@ the public repo and the tag are a separate issue, after storagebits's release ca
     `GTFS extracted 1192 departures` (about 16 s); the bus block shows lines 24 and 356;
   - served as `application/zip` (the Shield's case): `… is not a zip (71 KiB)`, then the same download, extraction
     and bus block.
-- **Shield.** Not checked: Almanak is now excluded from the VPN by split tunnelling, so the Shield no longer
-  reproduces the bug.
+- **Emulator, STM preset** (QA round 1, same debug build setup). `STM` preset, cached zip and ETag removed: `GTFS
+  downloaded 65416 KiB`, then `GTFS extracted 1192 departures for https://beta.stm.info/getContentAsset/…` (feed
+  `20261007130000_26N`) with no fallback; the stored ETag is the STM's. The bus block shows lines 24 and 356.
+- **Shield.** Not checked: it runs a custom mirror-only "STM · Montréal" network since ALG-175, so it does not take
+  the preset's URL. Once this ships, storagebits switches it back to the `STM` preset.
 - **Debts.** Older than this bug, found in review: a zip that passes the check but whose entries are corrupt (bad
   CRC, broken deflate stream) or that lacks `trips.txt` / `calendar*.txt` still replaces the cached zip and ETag;
   extraction then fails or yields an empty schedule, and the next sync gets a `304`, so nothing retries until the
