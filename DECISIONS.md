@@ -198,7 +198,7 @@ Then: run the screensaver for 24 h with `dumpsys meminfo` taken at the start and
     check runs before the rename, so a bad body never replaces the cached zip or its URL/ETag; the part file is
     always deleted. Both checks, not one: the content type is cheap but a server can label a page
     `application/zip` (or send no type), and the zip check alone would still download the whole page first.
-    Checking every entry's CRC was rejected: it reads the whole 65 MiB feed twice for a failure mode (a truncated
+    Checking every entry's CRC was rejected: it reads the whole 64 MiB feed twice for a failure mode (a truncated
     or corrupt zip) the extractor already reports.
 
 ### STM key

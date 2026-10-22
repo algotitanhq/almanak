@@ -44,7 +44,7 @@ class GtfsStoreTest {
                 "WK,1,1,1,1,1,0,0,20261001,20261031\n",
         ),
     )
-    private val html = "<!DOCTYPE html><html><body>Access denied</body></html>"
+    private val html = "<!DOCTYPE html><html><body>Welcome to the new site</body></html>"
 
     private fun zipResponse(bytes: ByteArray, etag: String) = MockResponse.Builder()
         .addHeader("Content-Type", "application/zip").addHeader("ETag", etag)
@@ -64,6 +64,8 @@ class GtfsStoreTest {
         assertTrue(store.sync(setOf("A"), emptySet()))
         assertEquals("/gtfs.zip", agency.takeRequest().target)
         assertEquals("/", agency.takeRequest().target)
+        assertEquals(2, agency.requestCount)
+        assertEquals(1, mirror.requestCount)
         assertArrayEquals(feed, store.zipFile.readBytes())
         assertEquals(mirror.url("/latest.zip").toString(), store.zipSource())
         assertEquals(listOf(mirror.url("/latest.zip").toString(), "\"m1\""), File(store.zipFile.parentFile, "gtfs.etag").readLines())
