@@ -178,16 +178,28 @@ Then: run the screensaver for 24 h with `dumpsys meminfo` taken at the start and
   ETags are stored per URL.
 - **Note.** The realtime API (`api.stm.info`) may well be filtered the same way once a valid key exists. The README
   covers excluding Almanak through the VPN's split tunnelling.
-- **Variant: 200 + HTML page (ALG-175, 2026-10-22).** stm.info now answers a VPN exit IP with a `200` and a ~71 KiB
-  HTML page instead of `441`. The fallback only caught HTTP errors, so the page was stored as `gtfs.zip` (with its
-  URL as the cache's source), extraction failed with `ZipException`, and the mirror was never tried. `GtfsStore`
-  now treats a body that is not a GTFS zip as a failed source, exactly like an HTTP error: a `text/html` response
-  is refused before reading, and the downloaded `gtfs.zip.part` must start with `PK\x03\x04`, open as a zip and
-  hold `stops.txt` and `stop_times.txt`. The check runs before the rename, so a bad body never replaces the cached
-  zip or its URL/ETag; the part file is always deleted. Both checks, not one: the content type is cheap but a
-  server can label a page `application/zip` (or send no type), and the zip check alone would still download the
-  whole page first. Checking every entry's CRC was rejected: it reads the whole 65 MiB feed twice for a failure
-  mode (a truncated or corrupt zip) the extractor already reports.
+- **Correction (ALG-175, 2026-10-22): the 2026-10-22 failure was not the VPN.** It was first read as a variant of
+  the block above; it is not. The STM moved its GTFS file when it launched its new site: the old URL
+  `www.stm.info/sites/default/files/gtfs/gtfs_stm.zip` answers `302` to the new site's home page, a `200 text/html`
+  of about 71 KiB, for everyone. It reproduces with Almanak excluded from the VPN and from a plain connection. The
+  fallback only caught HTTP errors, so the page was stored as `gtfs.zip` (with its URL as the cache's source),
+  extraction failed with `ZipException`, and the mirror was never tried.
+  - **New URL.** The `STM` preset now starts with the link on the STM's open data page (new site, "Données
+    ouvertes"): `https://beta.stm.info/getContentAsset/38dcb679-4237-4c02-b6f4-5f8434665e5c/dfc3d011-8f63-43f6-9ed8-4b444333a1d0/GTFS_STM.zip?language=fr`.
+    Checked on 2026-10-22: `200 application/zip`, no redirect, an `ETag`, about 64 MiB, holds `stops.txt` and
+    `stop_times.txt` (feed version `20261007130000_26N`). The mirror `mdb-2126` stays the fallback. This URL was
+    chosen over `beta.stm.info/sites/default/files/gtfs/gtfs_stm.zip` (a `302` to the same asset) because it is
+    the one the STM publishes; both depend on the `beta` host, which the next move may retire, and the validation
+    rule below turns that day into a fallback to the mirror instead of an empty bus block. Presets are always
+    taken from the app (`TransitAgency.normalized`), so a stored STM choice picks up the new URL on update.
+  - **Validation rule.** `GtfsStore` treats a body that is not a GTFS zip as a failed source, exactly like an HTTP
+    error: a `text/html` response (after any redirect) is refused before reading, and the downloaded
+    `gtfs.zip.part` must start with `PK\x03\x04`, open as a zip and hold `stops.txt` and `stop_times.txt`. The
+    check runs before the rename, so a bad body never replaces the cached zip or its URL/ETag; the part file is
+    always deleted. Both checks, not one: the content type is cheap but a server can label a page
+    `application/zip` (or send no type), and the zip check alone would still download the whole page first.
+    Checking every entry's CRC was rejected: it reads the whole 65 MiB feed twice for a failure mode (a truncated
+    or corrupt zip) the extractor already reports.
 
 ### STM key
 - Still rejected (`400 Invalid API Key`, see §3). The app treats this as `Unauthorized` and shows the schedule

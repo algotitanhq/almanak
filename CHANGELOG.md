@@ -8,8 +8,11 @@ All notable changes to Almanak are listed here. The format follows
 
 ### Fixed
 
-- A transit network's site that answers with a web page instead of the schedule zip (as stm.info does behind some
-  VPNs) no longer leaves the bus block empty: the page is refused and the Mobility Database mirror is used.
+- The STM moved its schedule file to its new site: the STM preset uses the new address, with the Mobility Database
+  mirror still as the fallback.
+- A transit network's site that answers with a web page instead of the schedule zip (as the STM's old address did,
+  by redirecting to its home page) no longer leaves the bus block empty: the page is refused and the next source,
+  the Mobility Database mirror, is used.
 
 ## [1.0.0] - 2026-10-20
 

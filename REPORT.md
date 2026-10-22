@@ -407,13 +407,19 @@ the public repo and the tag are a separate issue, after storagebits's release ca
 
 ## GTFS: a 200 HTML page is a failed source (ALG-176, 2026-10-22)
 
-- **Bug** (ALG-175). Behind a VPN, stm.info answered `200` with a ~71 KiB HTML page; `GtfsStore` stored it as
-  `gtfs.zip`, every sync failed with `ZipException`, and the mirror was never tried: the bus block stayed empty.
+- **Bug** (ALG-175). The STM moved its GTFS file to its new site: the old URL answers `302` to the home page, a
+  `200` with a ~71 KiB HTML page, VPN or not (first blamed on the VPN, corrected in DECISIONS). `GtfsStore` stored
+  it as `gtfs.zip`, every sync failed with `ZipException`, and the mirror was never tried: the bus block stayed
+  empty.
+- **New STM URL.** The `STM` preset starts with the link on the STM's new open data page, mirror second
+  (DECISIONS, "Correction (ALG-175)"). Checked from the forge: `200 application/zip`, no redirect, `ETag`
+  present, 66,986,445 bytes, `PK\x03\x04`, holds `stops.txt` and `stop_times.txt`, feed version
+  `20261007130000_26N`.
 - **Fix.** `GtfsStore.downloadFrom` refuses a `text/html` response and validates `gtfs.zip.part` before the rename
   (zip magic, opens as a zip, has `stops.txt` and `stop_times.txt`); a failure deletes the part file and moves on
-  to the next URL. The cached zip and its URL/ETag are only replaced by a valid zip (DECISIONS, "A VPN on the test
-  TV breaks stm.info", variant).
-- **Tests.** `GtfsStoreTest` (3 tests, MockWebServer): HTML page then mirror zip → the mirror's zip and ETag are
+  to the next URL. The cached zip and its URL/ETag are only replaced by a valid zip (DECISIONS, "Correction
+  (ALG-175)", validation rule).
+- **Tests.** `GtfsStoreTest` (3 tests, MockWebServer): a `302` to an HTML `200` page, then the mirror's zip → the mirror's zip and ETag are
   stored and extracted; an HTML body labelled `application/zip` → same; garbage from every source (a page, then a
   zip without `stop_times.txt`) → `sync` returns false (so `GtfsSyncWorker` answers `Result.retry()`), the cached
   zip and ETag are byte-identical, no part file is left. The three fail on the previous code.

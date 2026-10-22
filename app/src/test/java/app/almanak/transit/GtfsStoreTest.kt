@@ -55,12 +55,15 @@ class GtfsStoreTest {
         feedUrls = { listOf(agency.url("/gtfs.zip").toString(), mirror.url("/latest.zip").toString()) },
     )
 
-    @Test fun `a 200 HTML page falls back to the mirror`() = runTest {
+    @Test fun `a moved file redirected to an HTML page falls back to the mirror`() = runTest {
+        // The STM's case (ALG-175): the old URL answers 302 to the new site's home page, a 200 text/html.
+        agency.enqueue(MockResponse.Builder().code(302).addHeader("Location", "/").build())
         agency.enqueue(MockResponse.Builder().addHeader("Content-Type", "text/html; charset=utf-8").body(html).build())
         mirror.enqueue(zipResponse(feed, "\"m1\""))
         val store = store()
         assertTrue(store.sync(setOf("A"), emptySet()))
-        assertEquals(1, agency.requestCount)
+        assertEquals("/gtfs.zip", agency.takeRequest().target)
+        assertEquals("/", agency.takeRequest().target)
         assertArrayEquals(feed, store.zipFile.readBytes())
         assertEquals(mirror.url("/latest.zip").toString(), store.zipSource())
         assertEquals(listOf(mirror.url("/latest.zip").toString(), "\"m1\""), File(store.zipFile.parentFile, "gtfs.etag").readLines())

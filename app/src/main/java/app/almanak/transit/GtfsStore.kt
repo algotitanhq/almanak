@@ -24,7 +24,7 @@ class GtfsStore(
     private val http: OkHttpClient,
     private val filesDir: File,
     private val cacheDir: File,
-    /** The current network's zips, tried in order: the agency's own first, a mirror when it blocks us (VPN exit IPs). */
+    /** The current network's zips, tried in order: the agency's own first, a mirror when it fails us (VPN exit IPs, a moved file). */
     private val feedUrls: () -> List<String>,
 ) {
     private val lock = Mutex()
@@ -99,7 +99,7 @@ class GtfsStore(
         http.newCall(req).execute().use { resp ->
             if (resp.code == 304) return false
             if (!resp.isSuccessful) throw IOException("GTFS HTTP ${resp.code}")
-            // A VPN exit IP can get a 200 with an HTML page instead of an error: not a source either.
+            // A 200 HTML page (a moved file redirected to a home page, a block page) is not a source either.
             val type = resp.body.contentType()
             if (type?.type == "text" && type.subtype == "html") throw IOException("GTFS from $url is an HTML page")
             val tmp = File(cacheDir, "gtfs.zip.part")
