@@ -14,6 +14,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.IOException
+import java.util.zip.ZipFile
 
 /**
  * Owns the static schedule: conditional download of the agency zip (ETag), extraction for the configured
@@ -23,7 +24,7 @@ class GtfsStore(
     private val http: OkHttpClient,
     private val filesDir: File,
     private val cacheDir: File,
-    /** The current network's zips, tried in order: the agency's own first, a mirror when it blocks us (VPN exit IPs). */
+    /** The current network's zips, tried in order: the agency's own first, a mirror when it fails us (VPN exit IPs, a moved file). */
     private val feedUrls: () -> List<String>,
 ) {
     private val lock = Mutex()
@@ -73,10 +74,10 @@ class GtfsStore(
         }
     }
 
-    /** True when a new zip was written. Falls through the URL list on failure. */
     /** The URL the cached zip came from (kept beside its ETag), or null. */
     fun zipSource(): String? = etagFile.takeIf { it.exists() && zipFile.exists() }?.readLines()?.firstOrNull()
 
+    /** True when a new zip was written. Falls through the URL list on failure. */
     private fun download(urls: List<String>): Boolean {
         var last: Exception? = null
         for (url in urls) {
@@ -98,13 +99,36 @@ class GtfsStore(
         http.newCall(req).execute().use { resp ->
             if (resp.code == 304) return false
             if (!resp.isSuccessful) throw IOException("GTFS HTTP ${resp.code}")
+            // A 200 HTML page (a moved file redirected to a home page, a block page) is not a source either.
+            val type = resp.body.contentType()
+            if (type?.type == "text" && type.subtype == "html") throw IOException("GTFS from $url is an HTML page")
             val tmp = File(cacheDir, "gtfs.zip.part")
-            tmp.outputStream().use { out -> resp.body.byteStream().copyTo(out, 1 shl 16) }
-            if (!tmp.renameTo(zipFile)) throw IOException("rename failed")
+            try {
+                tmp.outputStream().use { out -> resp.body.byteStream().copyTo(out, 1 shl 16) }
+                // Checked before the rename: a bad body must never replace a good zip and its ETag.
+                if (!isGtfsZip(tmp)) throw IOException("GTFS from $url is not a zip (${tmp.length() / 1024} KiB)")
+                // Never a new zip beside the old URL/ETag, even if the process dies right after the rename.
+                etagFile.delete()
+                if (!tmp.renameTo(zipFile)) throw IOException("rename failed")
+            } finally {
+                tmp.delete()
+            }
             // The URL is kept even without an ETag: it says which network the zip belongs to.
             etagFile.writeText(url + (resp.header("ETag")?.let { "\n$it" } ?: ""))
             Log.i(TAG, "GTFS downloaded ${zipFile.length() / 1024} KiB")
             return true
+        }
+    }
+
+    /** Zip magic, readable central directory, and the two files the extractor cannot do without. */
+    private fun isGtfsZip(file: File): Boolean {
+        val magic = ByteArray(4)
+        val read = file.inputStream().use { it.read(magic) }
+        if (read != 4 || !magic.contentEquals(ZIP_MAGIC)) return false
+        return try {
+            ZipFile(file).use { z -> z.getEntry("stops.txt") != null && z.getEntry("stop_times.txt") != null }
+        } catch (_: IOException) {
+            false
         }
     }
 
@@ -113,6 +137,7 @@ class GtfsStore(
     companion object {
         private const val TAG = "Almanak"
         private val json = Json { ignoreUnknownKeys = true }
+        private val ZIP_MAGIC = byteArrayOf(0x50, 0x4B, 0x03, 0x04)
         fun key(urls: List<String>, stopIds: Set<String>, routeIds: Set<String>) =
             urls.firstOrNull().orEmpty() + "|" + stopIds.sorted().joinToString(",") + "|" + routeIds.sorted().joinToString(",")
     }

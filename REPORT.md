@@ -404,3 +404,38 @@ the public repo and the tag are a separate issue, after storagebits's release ca
   first (DECISIONS "v1.0.0 publish prep").
 - The key hand-off (backup, environment and secrets on the public repo) is pending: ALG-111 `key-handoff`.
 
+
+## GTFS: a 200 HTML page is a failed source (ALG-176, 2026-10-22)
+
+- **Bug** (ALG-175). The STM moved its GTFS file to its new site: the old URL answers `302` to the home page, a
+  `200` with a ~71 KiB HTML page, VPN or not (first blamed on the VPN, corrected in DECISIONS). `GtfsStore` stored
+  it as `gtfs.zip`, every sync failed with `ZipException`, and the mirror was never tried: the bus block stayed
+  empty.
+- **New STM URL.** The `STM` preset starts with the link on the STM's new open data page, mirror second
+  (DECISIONS, "Correction (ALG-175)"). Checked from the forge: `200 application/zip`, no redirect, `ETag`
+  present, 66,986,445 bytes, `PK\x03\x04`, holds `stops.txt` and `stop_times.txt`, feed version
+  `20261007130000_26N`.
+- **Fix.** `GtfsStore.downloadFrom` refuses a `text/html` response and validates `gtfs.zip.part` before the rename
+  (zip magic, opens as a zip, has `stops.txt` and `stop_times.txt`); a failure deletes the part file and moves on
+  to the next URL. The cached zip and its URL/ETag are only replaced by a valid zip (DECISIONS, "Correction
+  (ALG-175)", validation rule).
+- **Tests.** `GtfsStoreTest` (3 tests, MockWebServer): a `302` to an HTML `200` page, then the mirror's zip → the mirror's zip and ETag are
+  stored and extracted; an HTML body labelled `application/zip` → same; garbage from every source (a page, then a
+  zip without `stop_times.txt`) → `sync` returns false (so `GtfsSyncWorker` answers `Result.retry()`), the cached
+  zip and ETag are byte-identical, no part file is left. The three fail on the previous code.
+- **Emulator** (debug build, Android TV emulator, 1080p). A custom network whose first URL is a local server
+  answering every request with `200` and a 71 KiB HTML page, the STM mirror second, one STM stop:
+  - served as `text/html`: `GTFS download from … failed: … is an HTML page`, then `GTFS downloaded 65416 KiB` and
+    `GTFS extracted 1192 departures` (about 16 s); the bus block fills;
+  - served as `application/zip` (the Shield's case): `… is not a zip (71 KiB)`, then the same download, extraction
+    and bus block.
+- **Emulator, STM preset** (QA round 1, same debug build setup). `STM` preset, cached zip and ETag removed: `GTFS
+  downloaded 65416 KiB`, then `GTFS extracted 1192 departures for https://beta.stm.info/getContentAsset/…` (feed
+  `20261007130000_26N`) with no fallback; the stored ETag is the STM's. The bus block fills.
+- **Shield.** Not checked: it runs a custom mirror-only "STM · Montréal" network since ALG-175, so it does not take
+  the preset's URL. Once this ships, storagebits switches it back to the `STM` preset.
+- **Debts.** Older than this bug, found in review: a zip that passes the check but whose entries are corrupt (bad
+  CRC, broken deflate stream) or that lacks `trips.txt` / `calendar*.txt` still replaces the cached zip and ETag;
+  extraction then fails or yields an empty schedule, and the next sync gets a `304`, so nothing retries until the
+  feed's ETag changes. The full fix extracts from the part file before committing it (and writes the ETag only
+  after); out of this issue's scope.

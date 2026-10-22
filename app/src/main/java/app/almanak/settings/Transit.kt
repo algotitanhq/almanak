@@ -13,7 +13,7 @@ enum class KeyIn { Header, Query }
 data class TransitAgency(
     val id: String,
     val name: String,
-    /** Static GTFS zips, tried in order: the agency's own first, then a mirror (some agencies block VPN exit IPs). */
+    /** Static GTFS zips, tried in order: the agency's own first, then a mirror (blocked VPN exit IPs, a moved file). */
     val gtfsUrls: List<String>,
     /** GTFS-realtime TripUpdates; blank = timetable only. */
     val realtimeUrl: String = "",
@@ -50,7 +50,12 @@ data class TransitAgency(
 
         val STM = TransitAgency(
             "stm", "STM · Montréal",
-            listOf("https://www.stm.info/sites/default/files/gtfs/gtfs_stm.zip", mirror("mdb-2126")),
+            // The link on the STM's open data page since its new site (2026-10); the old www URL now redirects home.
+            listOf(
+                "https://beta.stm.info/getContentAsset/38dcb679-4237-4c02-b6f4-5f8434665e5c/" +
+                    "dfc3d011-8f63-43f6-9ed8-4b444333a1d0/GTFS_STM.zip?language=fr",
+                mirror("mdb-2126"),
+            ),
             realtimeUrl = "https://api.stm.info/pub/od/gtfs-rt/ic/v2/tripUpdates",
             keyName = "apikey", keyIn = KeyIn.Header,
             keyHelp = "https://portail.developpeurs.stm.info/apihub/",

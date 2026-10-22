@@ -4,6 +4,16 @@ All notable changes to Almanak are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- The STM moved its schedule file to its new site: the STM preset uses the new address, with the Mobility Database
+  mirror still as the fallback.
+- A transit network's site that answers with a web page instead of the schedule zip (as the STM's old address did,
+  by redirecting to its home page) no longer leaves the bus block empty: the page is refused and the next source,
+  the Mobility Database mirror, is used.
+
 ## [1.0.0] - 2026-10-20
 
 First public release: a signed APK to sideload on Android TV and Google TV (Android 9 or later).
