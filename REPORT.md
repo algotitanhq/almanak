@@ -426,12 +426,12 @@ the public repo and the tag are a separate issue, after storagebits's release ca
 - **Emulator** (debug build, Android TV emulator, 1080p). A custom network whose first URL is a local server
   answering every request with `200` and a 71 KiB HTML page, the STM mirror second, one STM stop:
   - served as `text/html`: `GTFS download from … failed: … is an HTML page`, then `GTFS downloaded 65416 KiB` and
-    `GTFS extracted 1192 departures` (about 16 s); the bus block shows lines 24 and 356;
+    `GTFS extracted 1192 departures` (about 16 s); the bus block fills;
   - served as `application/zip` (the Shield's case): `… is not a zip (71 KiB)`, then the same download, extraction
     and bus block.
 - **Emulator, STM preset** (QA round 1, same debug build setup). `STM` preset, cached zip and ETag removed: `GTFS
   downloaded 65416 KiB`, then `GTFS extracted 1192 departures for https://beta.stm.info/getContentAsset/…` (feed
-  `20261007130000_26N`) with no fallback; the stored ETag is the STM's. The bus block shows lines 24 and 356.
+  `20261007130000_26N`) with no fallback; the stored ETag is the STM's. The bus block fills.
 - **Shield.** Not checked: it runs a custom mirror-only "STM · Montréal" network since ALG-175, so it does not take
   the preset's URL. Once this ships, storagebits switches it back to the `STM` preset.
 - **Debts.** Older than this bug, found in review: a zip that passes the check but whose entries are corrupt (bad
