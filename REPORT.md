@@ -425,4 +425,8 @@ the public repo and the tag are a separate issue, after storagebits's release ca
     and bus block.
 - **Shield.** Not checked: Almanak is now excluded from the VPN by split tunnelling, so the Shield no longer
   reproduces the bug.
-- **Debts.** None new.
+- **Debts.** Older than this bug, found in review: a zip that passes the check but whose entries are corrupt (bad
+  CRC, broken deflate stream) or that lacks `trips.txt` / `calendar*.txt` still replaces the cached zip and ETag;
+  extraction then fails or yields an empty schedule, and the next sync gets a `304`, so nothing retries until the
+  feed's ETag changes. The full fix extracts from the part file before committing it (and writes the ETag only
+  after); out of this issue's scope.

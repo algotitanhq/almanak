@@ -60,6 +60,7 @@ class GtfsStoreTest {
         mirror.enqueue(zipResponse(feed, "\"m1\""))
         val store = store()
         assertTrue(store.sync(setOf("A"), emptySet()))
+        assertEquals(1, agency.requestCount)
         assertArrayEquals(feed, store.zipFile.readBytes())
         assertEquals(mirror.url("/latest.zip").toString(), store.zipSource())
         assertEquals(listOf(mirror.url("/latest.zip").toString(), "\"m1\""), File(store.zipFile.parentFile, "gtfs.etag").readLines())

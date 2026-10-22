@@ -107,6 +107,8 @@ class GtfsStore(
                 tmp.outputStream().use { out -> resp.body.byteStream().copyTo(out, 1 shl 16) }
                 // Checked before the rename: a bad body must never replace a good zip and its ETag.
                 if (!isGtfsZip(tmp)) throw IOException("GTFS from $url is not a zip (${tmp.length() / 1024} KiB)")
+                // Never a new zip beside the old URL/ETag, even if the process dies right after the rename.
+                etagFile.delete()
                 if (!tmp.renameTo(zipFile)) throw IOException("rename failed")
             } finally {
                 tmp.delete()
