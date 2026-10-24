@@ -812,3 +812,30 @@ features plus populaires ».
   prints one `HIT [gitleaks:<rule>] file:line` per finding, path relative to the scanned tree, never the secret
   (`--redact` stays). When the report is missing, unreadable (even halfway) or empty although gitleaks failed, the script says so
   and prints gitleaks' own (redacted) log, so an empty list can no longer look like a detail.
+
+## Event text never cut (ALG-221, 2026-10-24)
+
+- **Context** (ALG-220). storagebits: an event on a dated day was sometimes cut. Cause: in `FactLine`, the "on this
+  day" text was a fixed 26 sp caption with `maxLines = 2` and an ellipsis, and the name-day line `maxLines = 1` with
+  an ellipsis; nothing else limits them (the clock, date and other facts are never ellipsized). The app keeps only
+  events of 110 characters or less (`OnThisDaySource.MAX_CHARS`), but at 26 sp a 110-character text needs about
+  1,100 dp, more than two lines of the line under the clock.
+- **Options.** (a) Wrap on two lines with a smaller size (autosize down to a floor). (b) A marquee. (c) Rotate
+  between parts of the text. (d) A third line. (e) Tighter character cap.
+- **Choice.** (a), then (c) as the fallback: `FitText` (`ui/TextFit.kt`) measures the text in the width it gets
+  and takes the largest size from 26 sp down to **20 sp** (by 1 sp) that holds it on two lines. Past the floor
+  it splits the text into pages on word boundaries, each fitting two lines at 20 sp, and steps through them by itself
+  every **8 s** (cross-fade), with a small `1/2` under the year or the "name day" label. Nothing is ever ellipsized.
+- **Why.** 20 sp is the smallest caption size that still reads from the couch on a 960×540 dp canvas (the labels
+  around it are 14–15 sp); it keeps both real worst cases on two lines at the usual width (PR). Pages instead of
+  a marquee: a marquee makes the reader wait for the start and never stops moving on an ambient screen; pages stay
+  still for 8 s (two lines read in about 4 s) and need no tap or focus. A third line (d) would push the bus and
+  weather blocks at Large size, and a lower cap (e) hides real events instead of showing them. The History fact
+  stays a minute on screen, so even a three-page text is read in full at least twice.
+- **Narrowest width.** The text gets the least room under the clock, beside the widest right column (the compact
+  bus block at Large size, about 430 dp) with the almanac line at Large size: 960 − 96 − 430 − 24 dp, ÷ 1.15, less the
+  label ≈ 280 dp. `TextFitLayoutTest` checks the longest real texts and a synthetic worst case there, in the three
+  themes, with the bundled fonts (Robolectric, native graphics): every page whole, nothing lost, nothing cut. It also
+  checks that at a typical 480 dp the real texts need no pages, and that the old fixed caption did cut the
+  worst case.
+- **Debug hooks.** `--es history '<year>|<text>'` and `--es saints '<a>;<b>'` replace today's items for captures.

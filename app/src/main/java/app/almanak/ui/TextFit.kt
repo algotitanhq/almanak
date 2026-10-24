@@ -50,12 +50,21 @@ object TextFit {
 
     /** A page stays this long: two lines read from the couch, then the next. */
     const val PAGE_MILLIS = 8_000L
+    const val FADE_MILLIS = 700
 }
 
-/** [TextFit.fit] with real text layout: [maxLines] lines of [maxWidth] px, nothing beyond. */
-fun TextMeasurer.fit(text: String, style: TextStyle, maxWidth: Int, maxLines: Int): Fit = TextFit.fit(text) { s, scale ->
-    !measure(s, style.copy(fontSize = style.fontSize * scale), maxLines = maxLines, constraints = Constraints(maxWidth = maxWidth))
-        .hasVisualOverflow
+/**
+ * [TextFit.fit] with real text layout: [maxLines] lines within [maxWidth] × [maxHeight] px, nothing beyond. [style]
+ * has an sp size (scaled per step).
+ */
+fun TextMeasurer.fit(text: String, style: TextStyle, maxWidth: Int, maxLines: Int, maxHeight: Int = Constraints.Infinity): Fit {
+    require(style.fontSize.isSp) { "FitText needs an sp font size" }
+    fun fits(s: String, scale: Float, height: Int) =
+        !measure(s, style.copy(fontSize = style.fontSize * scale), maxLines = maxLines, constraints = Constraints(maxWidth = maxWidth, maxHeight = height))
+            .hasVisualOverflow
+    // Less height than one line at the floor: pages cannot help, fit the width alone (as before the height check).
+    val height = if (maxHeight == Constraints.Infinity || fits("Ag", TextFit.FLOOR, maxHeight)) maxHeight else Constraints.Infinity
+    return TextFit.fit(text) { s, scale -> fits(s, scale, height) }
 }
 
 /**
@@ -79,8 +88,10 @@ fun FitText(
         // Not filled: a short text keeps its own width, so a centred line stays centred.
         BoxWithConstraints(Modifier.weight(1f, fill = false)) {
             val width = constraints.maxWidth
-            val fit = remember(text, style, width, maxLines) {
-                if (width == Constraints.Infinity) Fit(1f, listOf(text)) else measurer.fit(text, style, width, maxLines)
+            // The height too: a parent that leaves less than two lines would otherwise clip the second one.
+            val height = constraints.maxHeight
+            val fit = remember(text, style, width, height, maxLines) {
+                if (width == Constraints.Infinity) Fit(1f, listOf(text)) else measurer.fit(text, style, width, maxLines, height)
             }
             var page by remember(fit) { mutableIntStateOf(0) }
             if (fit.pages.size > 1) {
@@ -88,8 +99,9 @@ fun FitText(
             }
             SideEffect { shown = page to fit.pages.size }
             val sized = style.copy(fontSize = style.fontSize * fit.scale)
-            Crossfade(targetState = page, animationSpec = tween(700), label = "page") { p ->
-                Text(fit.pages[p.coerceIn(fit.pages.indices)], style = sized, maxLines = maxLines)
+            // Fades on the page's text, so the outgoing page keeps its own words when the text changes.
+            Crossfade(targetState = fit.pages[page.coerceIn(fit.pages.indices)], animationSpec = tween(TextFit.FADE_MILLIS), label = "page") {
+                Text(it, style = sized, maxLines = maxLines)
             }
         }
     }

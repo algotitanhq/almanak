@@ -59,7 +59,8 @@ class MainActivity : ComponentActivity() {
                 // e.g. --es history '1789|The storming of the Bastille'  --es saints 'St A;St B'
                 history = if (!debug) null else intent.getStringExtra("history")?.split('|', limit = 2)
                     ?.takeIf { it.size == 2 }?.let { (y, t) -> y.toIntOrNull()?.let { listOf(HistoryItem(it, t)) } },
-                saints = if (!debug) null else intent.getStringExtra("saints")?.split(';')?.map(String::trim),
+                saints = if (!debug) null else intent.getStringExtra("saints")?.split(';')
+                    ?.map(String::trim)?.filter(String::isNotEmpty)?.takeIf { it.isNotEmpty() },
             ),
         )
     }

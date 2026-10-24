@@ -128,7 +128,7 @@ fun FactLine(e: EphemerisState, fact: Fact, minuteOfDay: Int, use24h: Boolean, l
 
 /** The label before a fitted text (year, "name day"), with "1/2" under it while the text is paged. */
 @Composable
-private fun LeadLabel(label: String, style: TextStyle, page: Int, pages: Int) {
+internal fun LeadLabel(label: String, style: TextStyle, page: Int, pages: Int) {
     Column(Modifier.padding(end = 18.dp)) {
         Text(label, style = style)
         if (pages > 1) Text("${page + 1}/$pages", style = Type.label(12.sp, FgFaint))

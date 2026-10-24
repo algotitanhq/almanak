@@ -128,7 +128,6 @@ dependencies {
     implementation(libs.androidx.datastore)
     implementation(libs.zxing.core)
     debugImplementation(libs.compose.ui.tooling)
-    debugImplementation(libs.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
