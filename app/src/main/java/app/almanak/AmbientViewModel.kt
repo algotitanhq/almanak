@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.almanak.clock.minuteTicks
+import app.almanak.ephemeris.HistoryItem
 import app.almanak.ephemeris.EphemerisState
 import app.almanak.settings.City
 import app.almanak.transit.Arrival
@@ -70,6 +71,9 @@ data class DebugOverrides(
     val wallpaper: WallpaperMode? = null,
     val wallpaperUrl: String? = null,
     val sky: SkyPhase? = null,
+    /** Replace today's "on this day" items and saints (text-fit captures, ALG-221). */
+    val history: List<HistoryItem>? = null,
+    val saints: List<String>? = null,
 )
 
 /**
@@ -123,7 +127,8 @@ class AmbientViewModel(private val graph: AppGraph, private val debug: DebugOver
     }.flowOn(Dispatchers.IO)
 
     val ephemeris: StateFlow<EphemerisState?> = combine(clock, history, city, settings.map { it.language }.distinctUntilChanged()) { now, h, c, lang ->
-        EphemerisState.compute(now, c.lat, c.lon, graph.saints(lang), h)
+        EphemerisState.compute(now, c.lat, c.lon, graph.saints(lang), debug.history ?: h)
+            .let { e -> debug.saints?.let { e.copy(saints = it) } ?: e }
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, whileVisible, null)
 
     /** GTFS-RT every 30 s; a rejected key is retried every 10 min, a network error with backoff. */

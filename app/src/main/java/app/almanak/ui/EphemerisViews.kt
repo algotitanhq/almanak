@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -21,7 +22,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -91,7 +92,7 @@ fun EphemerisState.facts(): List<Fact> = buildList {
 }
 
 @Composable
-fun FactLine(e: EphemerisState, fact: Fact, minuteOfDay: Int, use24h: Boolean, locale: Locale, modifier: Modifier = Modifier) {
+fun FactLine(e: EphemerisState, fact: Fact, minuteOfDay: Int, use24h: Boolean, locale: Locale, modifier: Modifier = Modifier, maxLines: Int = 2, floor: Float = TextFit.FLOOR) {
     val text = Type.serifItalic(26.sp)
     Row(modifier, verticalAlignment = if (fact == Fact.History) Alignment.Top else Alignment.CenterVertically) {
         when (fact) {
@@ -112,27 +113,35 @@ fun FactLine(e: EphemerisState, fact: Fact, minuteOfDay: Int, use24h: Boolean, l
                 Text("   $next", style = Type.label(14.sp, FgFaint))
             }
             Fact.Calendar -> Text(stringResource(R.string.day_week, e.dayOfYear, e.daysInYear, e.isoWeek), style = text)
-            Fact.Saint -> {
-                Text(stringResource(R.string.name_day) + "   ", style = Type.label(14.sp, FgFaint))
-                Text(e.saints.take(2).joinToString(" · "), style = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Never cut (ALG-221): FitText shrinks the text to its lines (a third only where the height allows, ALG-224),
+            // then pages it.
+            Fact.Saint -> FitText(e.saints.take(2).joinToString(" · "), text, maxLines = maxLines, floor = floor, verticalAlignment = Alignment.CenterVertically) { page, pages ->
+                LeadLabel(stringResource(R.string.name_day), Type.label(14.sp, FgFaint), page, pages)
             }
             Fact.History -> {
                 // Walk through the day's events: a different one each time History comes around.
                 val item = e.history[(minuteOfDay / e.facts().size) % e.history.size]
-                Text("${item.year}   ", style = Type.label(15.sp, Accent))
-                // Two lines: a cut-off event loses its meaning.
-                Text(item.text, style = text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                FitText(item.text, text, maxLines = maxLines, floor = floor) { page, pages -> LeadLabel("${item.year}", Type.label(15.sp, Accent), page, pages) }
             }
         }
     }
 }
 
-/** A single caption under the date, stepping through the facts once a minute. */
+/** The label before a fitted text (year, "name day"), with "1/2" under it while the text is paged. */
 @Composable
-fun EphemerisCaption(e: EphemerisState, now: ZonedDateTime, use24h: Boolean, locale: Locale, modifier: Modifier = Modifier, pinned: Fact? = null) {
+internal fun LeadLabel(label: String, style: TextStyle, page: Int, pages: Int) {
+    Column(Modifier.padding(end = 18.dp)) {
+        Text(label, style = style)
+        if (pages > 1) Text("${page + 1}/$pages", style = Type.label(12.sp, FgFaint))
+    }
+}
+
+/** A single caption under the date, stepping through the facts once a minute. [maxLines], [floor]: for the event texts. */
+@Composable
+fun EphemerisCaption(e: EphemerisState, now: ZonedDateTime, use24h: Boolean, locale: Locale, modifier: Modifier = Modifier, pinned: Fact? = null, maxLines: Int = 2, floor: Float = TextFit.FLOOR) {
     val facts = e.facts()
     val minute = now.hour * 60 + now.minute
     Crossfade(targetState = pinned?.takeIf { it in facts } ?: facts[minute % facts.size], animationSpec = tween(1_500), label = "fact", modifier = modifier) { fact ->
-        FactLine(e, fact, minute, use24h, locale)
+        FactLine(e, fact, minute, use24h, locale, maxLines = maxLines, floor = floor)
     }
 }

@@ -439,3 +439,51 @@ the public repo and the tag are a separate issue, after storagebits's release ca
   extraction then fails or yields an empty schedule, and the next sync gets a `304`, so nothing retries until the
   feed's ETag changes. The full fix extracts from the part file before committing it (and writes the ETag only
   after); out of this issue's scope.
+
+## Event text never cut (ALG-221, 2026-10-24)
+
+- **Bug** (ALG-220). On a dated day the "on this day" event was sometimes cut with an ellipsis: `FactLine` drew it
+  at a fixed 26 sp with `maxLines = 2` (and the name-day line with `maxLines = 1`), while the app keeps events up to
+  110 characters, about 1,100 dp wide at 26 sp.
+- **Fix.** `FitText` (`ui/TextFit.kt`): the largest size from 26 to 20 sp that holds the text on two lines in the
+  width and height it gets; past that, word-aligned pages that step by themselves every 8 s with a `1/2` counter.
+  No ellipsis anywhere; nothing to press (DECISIONS, "Event text never cut").
+- **Data.** Full-year scan of the Wikipedia feed in English, French and Spanish plus the saints' calendars: the
+  longest shown texts are all at the 110-character cap; the eight widest (two per language, two saints' lines)
+  are the test fixtures.
+- **Tests.** `TextFitTest.kt`, 9 tests, 4 of them pure logic and 5 Robolectric layout tests with the bundled fonts
+  (three themes): every page of the widest real texts and of a synthetic worst case fits two lines at the narrowest
+  width (280 dp); pages join back to the whole text; the rendered row (year label, counter) is never cut and every
+  page comes round; real texts need no pages at 480 dp; a height under one line falls back to the width; the old
+  fixed caption did cut the worst case. A mutation that draws the whole text again fails the suite. 73 unit tests
+  in all, 0 failures.
+- **Emulator** (debug build; Android TV 14 emulator, 720p at 213 dpi, 1080p at 320 dpi, and a 4K AVD, whose
+  framework renders the UI at 1920×1080 like real 4K Android TV devices): the widest English and French events
+  show whole on two lines at 720p, 1080p and 4K; the synthetic worst case pages (`1/2`, `2/2`); the longest Spanish
+  saints' line shows whole. Captures are attached to the issue, not committed.
+- **Debts.** The 110-character cap hides most English events (4,931 of 6,590 in the scan; 802 of 2,314 in French,
+  598 of 1,750 in Spanish). With pages in place the cap could be raised; that changes what the app shows, so it is
+  left for a separate decision.
+
+## Event text with four or more bus lines; settings kept on update (ALG-224, 2026-10-24)
+
+- **Reproduced.** Emulator (Android TV 14, 1080p), stop with four lines: the bus block turns compact, the event gets
+  about 385 dp and the widest one paged ("of Pomerania." alone, `2/2`).
+- **Fix.** The text uses the whole width under a bus table that ends above it (or just under it), may take a third
+  line where the height allows, and goes down to 20 sp at Large before paging (DECISIONS, ALG-224).
+- **Tests.** `BandLayoutTest`: 36 cases (4, 5, 6 lines × Medium, Large × six widest real events, EN/FR/ES), each whole
+  on one page, clear of the bus column and the weather band; all 36 page on the ALG-221 code. `TextFitLogicTest`:
+  the lower floor. `BandLayoutTest.otherLayouts…`: no bus stop yet, and the bus at the bottom with 2 to 6 lines (but see Debts). `SettingsTest`: a settings file written by v1.0.0 is read back whole. 78 unit tests, 0 failures.
+- **Emulator captures** (debug build, 1080p): 4, 5 and 6 STM lines × Medium, Large × EN, FR, ES, 18 captures: every
+  event whole, nothing over the bus table or the weather band. Attached to the issue, not committed.
+- **Upgrade.** `tools/upgrade-test.sh`: v1.0.0 with a full configuration (two stops, route filter, French, °F, Paper,
+  picture of the day, Large/Small sizes, realtime key, guest Wi-Fi) updated in place by this build: PASS, 14 fields
+  kept, firstInstallTime unchanged. A debug APK over the release v1.0.0 is refused (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`):
+  the Shield runs the release APK, so it is updated only with the release-signed build, via `tools/tv-update.sh`.
+- **Debts.** (1) Bus in the bottom zone at Large with 4 to 6 lines (not the default): at that size the compact lines
+  go one per row (two need 900 dp, the band has 751), so the bottom band takes almost all the height and the clock
+  and the almanac line get 0 to 10 dp (`BandLayoutTest` measures it; the same on the ALG-221 code). A fix belongs to
+  the bus layout (two columns of narrower compact lines, or dropping lines as the right zone does), separate from
+  the event text. (2) The "two lines max" reasoning of ALG-221 in DECISIONS is superseded by the ALG-224 entry.
+  (3) While the bus schedule loads at app start, the right column is short, so the event takes the whole width,
+  then moves beside the column once three or fewer lines arrive: a single re-layout at start.
