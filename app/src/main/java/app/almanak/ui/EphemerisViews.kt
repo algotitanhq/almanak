@@ -92,7 +92,7 @@ fun EphemerisState.facts(): List<Fact> = buildList {
 }
 
 @Composable
-fun FactLine(e: EphemerisState, fact: Fact, minuteOfDay: Int, use24h: Boolean, locale: Locale, modifier: Modifier = Modifier) {
+fun FactLine(e: EphemerisState, fact: Fact, minuteOfDay: Int, use24h: Boolean, locale: Locale, modifier: Modifier = Modifier, maxLines: Int = 2) {
     val text = Type.serifItalic(26.sp)
     Row(modifier, verticalAlignment = if (fact == Fact.History) Alignment.Top else Alignment.CenterVertically) {
         when (fact) {
@@ -113,14 +113,15 @@ fun FactLine(e: EphemerisState, fact: Fact, minuteOfDay: Int, use24h: Boolean, l
                 Text("   $next", style = Type.label(14.sp, FgFaint))
             }
             Fact.Calendar -> Text(stringResource(R.string.day_week, e.dayOfYear, e.daysInYear, e.isoWeek), style = text)
-            // Never cut (ALG-221): FitText shrinks the text to two lines, then pages it.
-            Fact.Saint -> FitText(e.saints.take(2).joinToString(" · "), text, verticalAlignment = Alignment.CenterVertically) { page, pages ->
+            // Never cut (ALG-221): FitText shrinks the text to its lines (a third only where the height allows, ALG-224),
+            // then pages it.
+            Fact.Saint -> FitText(e.saints.take(2).joinToString(" · "), text, maxLines = maxLines, verticalAlignment = Alignment.CenterVertically) { page, pages ->
                 LeadLabel(stringResource(R.string.name_day), Type.label(14.sp, FgFaint), page, pages)
             }
             Fact.History -> {
                 // Walk through the day's events: a different one each time History comes around.
                 val item = e.history[(minuteOfDay / e.facts().size) % e.history.size]
-                FitText(item.text, text) { page, pages -> LeadLabel("${item.year}", Type.label(15.sp, Accent), page, pages) }
+                FitText(item.text, text, maxLines = maxLines) { page, pages -> LeadLabel("${item.year}", Type.label(15.sp, Accent), page, pages) }
             }
         }
     }
@@ -135,12 +136,12 @@ internal fun LeadLabel(label: String, style: TextStyle, page: Int, pages: Int) {
     }
 }
 
-/** A single caption under the date, stepping through the facts once a minute. */
+/** A single caption under the date, stepping through the facts once a minute. [maxLines]: for the event texts. */
 @Composable
-fun EphemerisCaption(e: EphemerisState, now: ZonedDateTime, use24h: Boolean, locale: Locale, modifier: Modifier = Modifier, pinned: Fact? = null) {
+fun EphemerisCaption(e: EphemerisState, now: ZonedDateTime, use24h: Boolean, locale: Locale, modifier: Modifier = Modifier, pinned: Fact? = null, maxLines: Int = 2) {
     val facts = e.facts()
     val minute = now.hour * 60 + now.minute
     Crossfade(targetState = pinned?.takeIf { it in facts } ?: facts[minute % facts.size], animationSpec = tween(1_500), label = "fact", modifier = modifier) { fact ->
-        FactLine(e, fact, minute, use24h, locale)
+        FactLine(e, fact, minute, use24h, locale, maxLines = maxLines)
     }
 }

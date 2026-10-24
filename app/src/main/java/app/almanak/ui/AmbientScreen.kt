@@ -15,7 +15,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -93,30 +95,61 @@ private fun BandLayout(ui: AmbientUi, pinned: Fact? = null) {
         return
     }
     Column(Modifier.fillMaxSize().then(SafeArea)) {
-        // The top row takes what the bottom zone leaves: nothing above can push the band off-screen.
-        Row(Modifier.fillMaxWidth().weight(1f), verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f)) {
-                ClockBlock(ui.now, ui.use24h, ui.locale, timeSize = 170.sp, dateSize = 40.sp, align = Alignment.Start)
-                under.forEach { ModuleIn(it, ui, pinned, Modifier.padding(top = 18.dp, end = 24.dp)) }
-            }
-            if (right.isNotEmpty()) {
-                Column(Modifier.padding(top = 8.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(28.dp)) {
-                    right.forEach { ModuleIn(it, ui, pinned) }
+        // The top band takes what the bottom zone leaves: nothing above can push the band off-screen.
+        TopBand(
+            clock = { ClockBlock(ui.now, ui.use24h, ui.locale, timeSize = 170.sp, dateSize = 40.sp, align = Alignment.Start) },
+            under = { under.forEach { ModuleIn(it, ui, pinned, Modifier.padding(top = 18.dp), maxLines = 3) } },
+            right = {
+                if (right.isNotEmpty()) {
+                    Column(Modifier.padding(top = 8.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(28.dp)) {
+                        right.forEach { ModuleIn(it, ui, pinned) }
+                    }
                 }
-            }
-        }
+            },
+            modifier = Modifier.fillMaxWidth().weight(1f),
+        )
         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
             bottom.forEach { ModuleIn(it, ui, pinned, Modifier.fillMaxWidth()) }
         }
     }
 }
 
-/** One module, drawn for its zone and scaled to its size. */
+/**
+ * The clock with the modules under it, and the right zone's column. The modules under the clock get the whole width
+ * when the right column ends above them (four or more bus lines make a short compact table), else the width beside it
+ * less a 24 dp gap. Either way they get the height left under the clock, so the event text can wrap without ever
+ * reaching the bottom band (ALG-224).
+ */
 @Composable
-private fun ModuleIn(m: ModuleSetting, ui: AmbientUi, pinned: Fact?, modifier: Modifier = Modifier) {
+private fun TopBand(clock: @Composable () -> Unit, under: @Composable () -> Unit, right: @Composable () -> Unit, modifier: Modifier = Modifier) {
+    Layout(contents = listOf(clock, under, right), modifier = modifier) { (clocks, unders, rights), constraints ->
+        val w = constraints.maxWidth
+        val h = constraints.maxHeight
+        val r = rights.map { it.measure(Constraints(maxWidth = w, maxHeight = h)) }
+        val rw = r.maxOfOrNull { it.width } ?: 0
+        val rh = r.maxOfOrNull { it.height } ?: 0
+        val c = clocks.map { it.measure(Constraints(maxWidth = (w - rw).coerceAtLeast(0), maxHeight = h)) }
+        var y = c.sumOf { it.height }
+        val beside = (w - rw - 24.dp.roundToPx()).coerceAtLeast(0)
+        val u = unders.map { m ->
+            // The column's bottom above this module's top (its own top padding is the gap): the whole width.
+            val width = if (rw == 0 || rh <= y) w else beside
+            m.measure(Constraints(maxWidth = width, maxHeight = (h - y).coerceAtLeast(0))).also { y += it.height }
+        }
+        layout(w, if (constraints.hasBoundedHeight) h else maxOf(y, rh)) {
+            var top = 0
+            (c + u).forEach { it.place(0, top); top += it.height }
+            r.forEach { it.place(w - it.width, 0) }
+        }
+    }
+}
+
+/** One module, drawn for its zone and scaled to its size. [maxLines]: lines the event text may take (UnderClock). */
+@Composable
+private fun ModuleIn(m: ModuleSetting, ui: AmbientUi, pinned: Fact?, modifier: Modifier = Modifier, maxLines: Int = 2) {
     Scaled(m.size.scale) {
         when (m.module) {
-            Module.Almanac -> ui.ephemeris?.let { EphemerisCaption(it, ui.now, ui.use24h, ui.locale, modifier, pinned) }
+            Module.Almanac -> ui.ephemeris?.let { EphemerisCaption(it, ui.now, ui.use24h, ui.locale, modifier, pinned, maxLines) }
             Module.Bus -> when (m.zone) {
                 Zone.Bottom -> BusRow(ui.bus, ui.now, ui.use24h, ui.locale, modifier)
                 else -> BusStack(ui.bus, ui.now, ui.use24h, ui.locale, modifier)
