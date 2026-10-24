@@ -18,17 +18,22 @@ AAPT=$(ls "$SDK"/build-tools/*/aapt | sort -V | tail -1)
 A=(adb -s "$DEV")
 signer() { "$APKSIGNER" verify --print-certs "$1" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p'; }
 
-if "${A[@]}" shell dumpsys media_session | grep -q 'state=PlaybackState {state=3'; then
+# Read whole before matching: grep -q closing the pipe early would fail the check under pipefail.
+sessions=$("${A[@]}" shell dumpsys media_session)
+if grep -Eq 'state=(PlaybackState \{state=)?(3|PLAYING)\b' <<<"$sessions"; then
   echo "refused: something is playing on the TV; try later" >&2; exit 1
 fi
 new_signer=$(signer "$APK")
-new_code=$("$AAPT" dump badging "$APK" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")
-path=$("${A[@]}" shell pm path app.almanak | sed -n 's/^package://p' | head -1 | tr -d '\r')
+new_code=$("$AAPT" dump badging "$APK" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p;T;q")
+[[ -n "$new_signer" && -n "$new_code" ]] || { echo "cannot read the signer or version of $APK" >&2; exit 1; }
+path=$("${A[@]}" shell pm path app.almanak 2>/dev/null | sed -n 's/^package://p' | tr -d '\r' || true)
+path=${path%%$'\n'*}
 if [[ -n "$path" ]]; then
   tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-  "${A[@]}" pull "$path" "$tmp/installed.apk" >/dev/null 2>&1
+  "${A[@]}" pull "$path" "$tmp/installed.apk" >/dev/null 2>&1 || { echo "cannot copy the installed APK to check its signer" >&2; exit 1; }
   old_signer=$(signer "$tmp/installed.apk")
-  old_code=$("${A[@]}" shell dumpsys package app.almanak | sed -n 's/.*versionCode=\([0-9]*\).*/\1/p' | head -1)
+  old_code=$("${A[@]}" shell dumpsys package app.almanak | sed -n 's/.*versionCode=\([0-9]*\).*/\1/p;T;q')
+  [[ -n "$old_signer" && -n "$old_code" ]] || { echo "cannot read the installed app's signer or version" >&2; exit 1; }
   if [[ "$new_signer" != "$old_signer" ]]; then
     echo "refused: $APK is signed by $new_signer, the installed app by $old_signer." >&2
     echo "  Installing it would need an uninstall, which erases the settings. Use a build signed by the same key" >&2

@@ -149,7 +149,8 @@ private fun TopBand(
                 else -> y to (w - rw - 24.dp.roundToPx()).coerceAtLeast(0)
             }
             tops += top
-            m.measure(Constraints(maxWidth = width, maxHeight = (h - top).coerceAtLeast(0))).also { y = top + it.height }
+            val height = if (constraints.hasBoundedHeight) (h - top).coerceAtLeast(0) else Constraints.Infinity
+            m.measure(Constraints(maxWidth = width, maxHeight = height)).also { y = top + it.height }
         }
         layout(w, if (constraints.hasBoundedHeight) h else maxOf(y, rh)) {
             var top = 0

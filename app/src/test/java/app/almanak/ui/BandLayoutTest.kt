@@ -37,6 +37,7 @@ import app.almanak.weather.Weather
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.Locale
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -152,6 +153,7 @@ class BandLayoutTest {
             val routes = all.filter { it.second.layoutInput.text.text.matches(Regex("""\d{3}""")) }.map { it.first.boundsInRoot }
             val band = all.filter { it.second.layoutInput.text.text.endsWith("°") }.map { it.first.boundsInRoot }
             if (routes.isEmpty()) failures += "$case: no bus line shown"
+            if (band.isEmpty()) failures += "$case: no weather band shown"
             routes.firstOrNull { it.overlaps(box) }?.let { failures += "$case: overlaps the bus column at $it (text $box)" }
             band.firstOrNull { it.top < box.bottom }?.let { failures += "$case: reaches the weather band at $it (text $box)" }
         }
@@ -173,6 +175,43 @@ class BandLayoutTest {
         assertFalse(event.second.hasVisualOverflow)
         val routes = all.filter { it.second.layoutInput.text.text.matches(Regex("""\d{3}""")) }.map { it.first.boundsInRoot }
         assertTrue(routes.isNotEmpty())
-        assertTrue(routes.none { it.overlaps(event.first.boundsInRoot) })
+        val box = event.first.boundsInRoot
+        // Beside the column, not moved under it at full width.
+        assertTrue("$box vs $routes", box.right <= routes.minOf { it.left })
+    }
+
+    @Test fun otherLayoutsKeepTheTextWhole() {
+        // No bus stop yet (empty right column), and weather on the right with 2 to 6 bus lines at the bottom.
+        compose.mainClock.autoAdvance = false
+        val text = TextFitLayoutTest.LONGEST[0]
+        val noStops = ui(text, 0, ModuleSize.Medium, Locale.US).copy(bus = BusState(emptyList(), RtStatus.Live, hasSchedule = true, noStops = true))
+        fun swapped(lines: Int, size: ModuleSize) = ui(text, lines, size, Locale.US).let { u ->
+            u.copy(modules = u.modules.map { m -> if (m.module == Module.Weather) m.copy(zone = Zone.Right) else if (m.module == Module.Bus) m.copy(zone = Zone.Bottom) else m })
+        }
+        var shown by mutableStateOf(noStops)
+        compose.setContent {
+            CompositionLocalProvider(LocalAlmanakTheme provides AlmanakTheme.Nocturne) { AmbientScreen(shown, variant = "fact-history") }
+        }
+        // Not the bus at the bottom at Large with 4+ lines: one compact line per row leaves the clock itself no room
+        // (REPORT.md, ALG-224 debts).
+        val cases = listOf(noStops) + listOf(2, 3, 4, 5, 6).flatMap { n -> ModuleSize.entries.map { swapped(n, it) } }
+            .filterNot { it.bus.lines.size > 3 && it.modules.first { m -> m.module == Module.Bus }.size == ModuleSize.Large }
+        val failures = mutableListOf<String>()
+        for (case in cases) {
+            compose.runOnUiThread { shown = case }
+            compose.waitForIdle()
+            compose.mainClock.advanceTimeBy(TextFit.FADE_MILLIS + 500L)
+            compose.waitForIdle()
+            val all = texts()
+            val event = all.filter { it.second.layoutInput.text.text == text }
+            assertEquals("${case.modules}", 1, event.size)
+            val r = event.single().second
+            if (r.hasVisualOverflow) { failures += "${case.bus.lines.size} ${case.modules.map { "${it.module}:${it.zone}:${it.size}" }}: ${r.lineCount} lines, ${r.size} in ${r.layoutInput.constraints}"; continue }
+            val box = event.single().first.boundsInRoot
+            // Nothing else drawn over it (the year label sits beside it, on its own).
+            val over = all.filter { it !== event.single() && it.first.boundsInRoot.overlaps(box) }
+            assertTrue("${over.map { it.second.layoutInput.text.text to it.first.boundsInRoot }} over $box", over.isEmpty())
+        }
+        assertTrue(failures.joinToString("\n"), failures.isEmpty())
     }
 }

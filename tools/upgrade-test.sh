@@ -12,7 +12,7 @@ if [[ "$DEV" != emulator-* || $# -ne 2 ]]; then
   echo "  emulators only: the test uninstalls app.almanak, which erases its settings" >&2
   exit 2
 fi
-OLD="$1"; NEW="$2"
+OLD=$(realpath "$1"); NEW=$(realpath "$2")
 cd "$(dirname "$0")/.."
 A=(adb -s "$DEV")
 OUT=shots/upgrade
@@ -51,6 +51,15 @@ echo "3. update in place with the new APK (adb install -r)"
 "${A[@]}" shell am start -W -n app.almanak/.MainActivity >/dev/null
 sleep "${SETTLE:-25}"
 "${A[@]}" exec-out screencap -p > "$OUT/after-update.png"
+# The new app saves the file again through its own serializer (three themes round), as for the old one. A fresh
+# start: the settings extra only opens the panel when the activity is created.
+"${A[@]}" shell am force-stop app.almanak
+"${A[@]}" shell am start -W -n app.almanak/.MainActivity --ez settings true >/dev/null
+sleep 6
+for _ in 1 2 3; do "${A[@]}" shell input keyevent KEYCODE_DPAD_CENTER; sleep 1.5; done
+"${A[@]}" shell input keyevent KEYCODE_BACK
+sleep 2
+"${A[@]}" shell am force-stop app.almanak
 settings > "$OUT/settings-new.json"
 
 echo "4. compare"
@@ -60,7 +69,9 @@ old, new = (json.load(open(p)) for p in sys.argv[1:3])
 secret = {"realtimeKey", "password"}
 def show(d):
     return {k: ("<set>" if k in secret and v else v) for k, v in d.items()}
-diff = sorted(k for k in old.keys() | new.keys() if old.get(k) != new.get(k))
+# A network preset is stored whole but read by id: its addresses may change between versions (the STM's did).
+same = lambda k: (old.get(k) or {}).get("id") == (new.get(k) or {}).get("id") if k == "agency" else old.get(k) == new.get(k)
+diff = sorted(k for k in old.keys() | new.keys() if not same(k))
 for k in ("stops", "routes", "city", "language", "unit", "theme", "wallpaper", "modules", "onboarded", "schema"):
     print(f"  {k}: {json.dumps(new.get(k), ensure_ascii=False)}")
 print("  realtimeKey:", "kept" if old.get("realtimeKey") and old.get("realtimeKey") == new.get("realtimeKey") else "LOST")

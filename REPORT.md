@@ -473,11 +473,17 @@ the public repo and the tag are a separate issue, after storagebits's release ca
   line where the height allows, and goes down to 20 sp at Large before paging (DECISIONS, ALG-224).
 - **Tests.** `BandLayoutTest`: 36 cases (4, 5, 6 lines × Medium, Large × six widest real events, EN/FR/ES), each whole
   on one page, clear of the bus column and the weather band; all 36 page on the ALG-221 code. `TextFitLogicTest`:
-  the lower floor. `SettingsTest`: a settings file written by v1.0.0 is read back whole. 77 unit tests, 0 failures.
+  the lower floor. `BandLayoutTest.otherLayouts…`: no bus stop yet, and the bus at the bottom with 2 to 6 lines (but see Debts). `SettingsTest`: a settings file written by v1.0.0 is read back whole. 78 unit tests, 0 failures.
 - **Emulator captures** (debug build, 1080p): 4, 5 and 6 STM lines × Medium, Large × EN, FR, ES, 18 captures: every
   event whole, nothing over the bus table or the weather band. Attached to the issue, not committed.
 - **Upgrade.** `tools/upgrade-test.sh`: v1.0.0 with a full configuration (two stops, route filter, French, °F, Paper,
   picture of the day, Large/Small sizes, realtime key, guest Wi-Fi) updated in place by this build: PASS, 14 fields
   kept, firstInstallTime unchanged. A debug APK over the release v1.0.0 is refused (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`):
   the Shield runs the release APK, so it is updated only with the release-signed build, via `tools/tv-update.sh`.
-- **Debt.** The "two lines max" reasoning of ALG-221 in DECISIONS is superseded by this entry (kept as history).
+- **Debts.** (1) Bus in the bottom zone at Large with 4 to 6 lines (not the default): at that size the compact lines
+  go one per row (two need 900 dp, the band has 751), so the bottom band takes almost all the height and the clock
+  and the almanac line get 0 to 10 dp (`BandLayoutTest` measures it; the same on the ALG-221 code). A fix belongs to
+  the bus layout (two columns of narrower compact lines, or dropping lines as the right zone does), separate from
+  the event text. (2) The "two lines max" reasoning of ALG-221 in DECISIONS is superseded by the ALG-224 entry.
+  (3) While the bus schedule loads at app start, the right column is short, so the event takes the whole width,
+  then moves beside the column once three or fewer lines arrive: a single re-layout at start.
