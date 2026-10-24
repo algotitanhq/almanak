@@ -13,11 +13,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -106,6 +109,7 @@ private fun BandLayout(ui: AmbientUi, pinned: Fact? = null) {
                     }
                 }
             },
+            underNeed = under.firstOrNull()?.let { twoCaptionLines(it.size.scale) } ?: 0.dp,
             modifier = Modifier.fillMaxWidth().weight(1f),
         )
         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -115,13 +119,19 @@ private fun BandLayout(ui: AmbientUi, pinned: Fact? = null) {
 }
 
 /**
- * The clock with the modules under it, and the right zone's column. The modules under the clock get the whole width
- * when the right column ends above them (four or more bus lines make a short compact table), else the width beside it
- * less a 24 dp gap. Either way they get the height left under the clock, so the event text can wrap without ever
- * reaching the bottom band (ALG-224).
+ * The clock with the modules under it, and the right zone's column (ALG-224). A module under the clock gets the whole
+ * width when the right column ends above it (four or more bus lines make a short compact table), or just under the
+ * column when that leaves it [underNeed]; else the width beside the column, less a 24 dp gap. Either way it gets
+ * only the height left, so the event text wraps or pages without ever reaching the bottom band.
  */
 @Composable
-private fun TopBand(clock: @Composable () -> Unit, under: @Composable () -> Unit, right: @Composable () -> Unit, modifier: Modifier = Modifier) {
+private fun TopBand(
+    clock: @Composable () -> Unit,
+    under: @Composable () -> Unit,
+    right: @Composable () -> Unit,
+    underNeed: Dp,
+    modifier: Modifier = Modifier,
+) {
     Layout(contents = listOf(clock, under, right), modifier = modifier) { (clocks, unders, rights), constraints ->
         val w = constraints.maxWidth
         val h = constraints.maxHeight
@@ -130,18 +140,33 @@ private fun TopBand(clock: @Composable () -> Unit, under: @Composable () -> Unit
         val rh = r.maxOfOrNull { it.height } ?: 0
         val c = clocks.map { it.measure(Constraints(maxWidth = (w - rw).coerceAtLeast(0), maxHeight = h)) }
         var y = c.sumOf { it.height }
-        val beside = (w - rw - 24.dp.roundToPx()).coerceAtLeast(0)
+        val tops = mutableListOf<Int>()
         val u = unders.map { m ->
-            // The column's bottom above this module's top (its own top padding is the gap): the whole width.
-            val width = if (rw == 0 || rh <= y) w else beside
-            m.measure(Constraints(maxWidth = width, maxHeight = (h - y).coerceAtLeast(0))).also { y += it.height }
+            // The module's own top padding is the gap, under the date as under the column.
+            val (top, width) = when {
+                rw == 0 || rh <= y -> y to w
+                h - rh >= underNeed.roundToPx() -> rh to w
+                else -> y to (w - rw - 24.dp.roundToPx()).coerceAtLeast(0)
+            }
+            tops += top
+            m.measure(Constraints(maxWidth = width, maxHeight = (h - top).coerceAtLeast(0))).also { y = top + it.height }
         }
         layout(w, if (constraints.hasBoundedHeight) h else maxOf(y, rh)) {
             var top = 0
-            (c + u).forEach { it.place(0, top); top += it.height }
+            c.forEach { it.place(0, top); top += it.height }
+            u.forEachIndexed { i, p -> p.place(0, tops[i]) }
             r.forEach { it.place(w - it.width, 0) }
         }
     }
+}
+
+/** Room for two lines of the almanac caption at [scale], with its 18 dp top gap: enough to show an event whole. */
+@Composable
+private fun twoCaptionLines(scale: Float): Dp {
+    val measurer = rememberTextMeasurer()
+    val style = Type.serifItalic(26.sp)
+    val px = remember(measurer, style) { measurer.measure("Ag\nAg", style).size.height }
+    return with(LocalDensity.current) { px.toDp() } * scale + 18.dp * scale
 }
 
 /** One module, drawn for its zone and scaled to its size. [maxLines]: lines the event text may take (UnderClock). */
@@ -149,7 +174,10 @@ private fun TopBand(clock: @Composable () -> Unit, under: @Composable () -> Unit
 private fun ModuleIn(m: ModuleSetting, ui: AmbientUi, pinned: Fact?, modifier: Modifier = Modifier, maxLines: Int = 2) {
     Scaled(m.size.scale) {
         when (m.module) {
-            Module.Almanac -> ui.ephemeris?.let { EphemerisCaption(it, ui.now, ui.use24h, ui.locale, modifier, pinned, maxLines) }
+            // Large shrinks the event text to the same 20 sp as Medium before paging it (ALG-224); Small keeps its own.
+            Module.Almanac -> ui.ephemeris?.let {
+                EphemerisCaption(it, ui.now, ui.use24h, ui.locale, modifier, pinned, maxLines, floor = minOf(TextFit.FLOOR, TextFit.FLOOR / m.size.scale))
+            }
             Module.Bus -> when (m.zone) {
                 Zone.Bottom -> BusRow(ui.bus, ui.now, ui.use24h, ui.locale, modifier)
                 else -> BusStack(ui.bus, ui.now, ui.use24h, ui.locale, modifier)

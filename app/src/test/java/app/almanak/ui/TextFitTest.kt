@@ -41,27 +41,37 @@ class TextFitLogicTest {
     private fun fitsIn(chars: Int) = { s: String, scale: Float -> s.length <= chars / scale }
 
     @Test fun shortTextKeepsFullSize() {
-        assertEquals(Fit(1f, listOf("Short")), TextFit.fit("Short", fitsIn(40)))
+        assertEquals(Fit(1f, listOf("Short")), TextFit.fit("Short", fits = fitsIn(40)))
     }
 
     @Test fun longerTextShrinksBeforePaging() {
         val text = "x".repeat(45)
-        val fit = TextFit.fit(text, fitsIn(40))
+        val fit = TextFit.fit(text, fits = fitsIn(40))
         assertEquals(listOf(text), fit.pages)
         assertTrue(fit.scale < 1f && fit.scale >= TextFit.FLOOR)
     }
 
     @Test fun tooLongTextIsPagedOnWordsAndLosesNothing() {
         val text = (1..30).joinToString(" ") { "word$it" }
-        val fit = TextFit.fit(text, fitsIn(40))
+        val fit = TextFit.fit(text, fits = fitsIn(40))
         assertEquals(TextFit.FLOOR, fit.scale)
         assertTrue(fit.pages.size > 1)
         assertEquals(text, fit.pages.joinToString(" "))
         fit.pages.forEach { assertTrue(it, it.length <= 40 / TextFit.FLOOR) }
     }
 
+    @Test fun aLowerFloorShrinksFurtherBeforePaging() {
+        // A Large module goes down to the same 20 sp as Medium (FLOOR / 1.15) before paging (ALG-224).
+        val text = (1..11).joinToString(" ") { "word" }
+        assertTrue(TextFit.fit(text, fits = fitsIn(40)).pages.size > 1)
+        val fit = TextFit.fit(text, TextFit.FLOOR / 1.15f, fitsIn(40))
+        assertEquals(listOf(text), fit.pages)
+        assertTrue(fit.scale < TextFit.FLOOR && fit.scale >= TextFit.FLOOR / 1.15f)
+        assertEquals(TextFit.SCALES, TextFit.scales(TextFit.FLOOR))
+    }
+
     @Test fun aWordLongerThanAPageStillGetsShown() {
-        val fit = TextFit.fit("a ${"x".repeat(100)} b", fitsIn(40))
+        val fit = TextFit.fit("a ${"x".repeat(100)} b", fits = fitsIn(40))
         assertEquals(listOf("a", "x".repeat(100), "b"), fit.pages)
     }
 }
