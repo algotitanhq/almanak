@@ -26,6 +26,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import app.almanak.ephemeris.HistoryItem
 import app.almanak.settings.Module
 import app.almanak.ui.AlmanakRoot
 import app.almanak.ui.DisplayConfig
@@ -55,6 +56,10 @@ class MainActivity : ComponentActivity() {
                 wallpaper = intent.getStringExtra("wallpaper")?.let { w -> WallpaperMode.entries.firstOrNull { it.name.equals(w, true) } },
                 wallpaperUrl = intent.getStringExtra("wallpaperUrl"),
                 sky = if (!debug) null else intent.getStringExtra("sky")?.let { s -> SkyPhase.entries.firstOrNull { it.name.equals(s, true) } },
+                // e.g. --es history '1789|The storming of the Bastille'  --es saints 'St A;St B'
+                history = if (!debug) null else intent.getStringExtra("history")?.split('|', limit = 2)
+                    ?.takeIf { it.size == 2 }?.let { (y, t) -> y.toIntOrNull()?.let { listOf(HistoryItem(it, t)) } },
+                saints = if (!debug) null else intent.getStringExtra("saints")?.split(';')?.map(String::trim),
             ),
         )
     }

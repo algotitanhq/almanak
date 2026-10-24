@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -21,7 +22,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -112,18 +113,25 @@ fun FactLine(e: EphemerisState, fact: Fact, minuteOfDay: Int, use24h: Boolean, l
                 Text("   $next", style = Type.label(14.sp, FgFaint))
             }
             Fact.Calendar -> Text(stringResource(R.string.day_week, e.dayOfYear, e.daysInYear, e.isoWeek), style = text)
-            Fact.Saint -> {
-                Text(stringResource(R.string.name_day) + "   ", style = Type.label(14.sp, FgFaint))
-                Text(e.saints.take(2).joinToString(" · "), style = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Never cut (ALG-221): FitText shrinks the text to two lines, then pages it.
+            Fact.Saint -> FitText(e.saints.take(2).joinToString(" · "), text, verticalAlignment = Alignment.CenterVertically) { page, pages ->
+                LeadLabel(stringResource(R.string.name_day), Type.label(14.sp, FgFaint), page, pages)
             }
             Fact.History -> {
                 // Walk through the day's events: a different one each time History comes around.
                 val item = e.history[(minuteOfDay / e.facts().size) % e.history.size]
-                Text("${item.year}   ", style = Type.label(15.sp, Accent))
-                // Two lines: a cut-off event loses its meaning.
-                Text(item.text, style = text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                FitText(item.text, text) { page, pages -> LeadLabel("${item.year}", Type.label(15.sp, Accent), page, pages) }
             }
         }
+    }
+}
+
+/** The label before a fitted text (year, "name day"), with "1/2" under it while the text is paged. */
+@Composable
+private fun LeadLabel(label: String, style: TextStyle, page: Int, pages: Int) {
+    Column(Modifier.padding(end = 18.dp)) {
+        Text(label, style = style)
+        if (pages > 1) Text("${page + 1}/$pages", style = Type.label(12.sp, FgFaint))
     }
 }
 

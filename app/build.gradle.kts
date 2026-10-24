@@ -72,6 +72,8 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        // Robolectric reads the bundled fonts, so text-fit tests lay text out as the TV does (ALG-221).
+        unitTests.isIncludeAndroidResources = true
     }
 
     signingConfigs {
@@ -126,8 +128,12 @@ dependencies {
     implementation(libs.androidx.datastore)
     implementation(libs.zxing.core)
     debugImplementation(libs.compose.ui.tooling)
+    debugImplementation(libs.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
+    testImplementation(libs.robolectric)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
 }
