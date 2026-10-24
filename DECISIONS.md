@@ -827,7 +827,7 @@ features plus populaires ».
   it splits the text into pages on word boundaries, each fitting two lines at 20 sp, and steps through them by itself
   every **8 s** (cross-fade), with a small `1/2` under the year or the "name day" label. Nothing is ever ellipsized.
 - **Why.** 20 sp is the smallest caption size that still reads from the couch on a 960×540 dp canvas (the labels
-  around it are 14–15 sp); it keeps both real worst cases on two lines at the usual width (PR). Pages instead of
+  around it are 14–15 sp); it keeps the real worst cases on two lines at the usual width (below). Pages instead of
   a marquee: a marquee makes the reader wait for the start and never stops moving on an ambient screen; pages stay
   still for 8 s (two lines read in about 4 s) and need no tap or focus. A third line (d) would push the bus and
   weather blocks at Large size, and a lower cap (e) hides real events instead of showing them. The History fact
@@ -838,4 +838,15 @@ features plus populaires ».
   themes, with the bundled fonts (Robolectric, native graphics): every page whole, nothing lost, nothing cut. It also
   checks that at a typical 480 dp the real texts need no pages, and that the old fixed caption did cut the
   worst case.
+- **Height.** The fit also respects the height the parent leaves, so a squeezed column pages the text instead of
+  clipping its second line. When not even one line fits at 20 sp, pages cannot help: the fit falls back to the
+  width alone (the behaviour before this change).
+- **Real data** (scan of 2026-10-24: Wikipedia "selected" events for every day of the year, in `en`, `fr`, `es`, the
+  feed the app reads, with the app's cleanup and its 110-character cap; the bundled saints' calendars). Shown
+  events: 1,659 (en), 1,512 (fr), 1,152 (es); many reach the cap in each language. The widest ones measure about
+  1,100 dp at 26 sp (two lines of 550 dp); the longest saints' line is 104 characters (es, 17 November), about
+  950 dp. At the default screen (about 600 dp beside a two-stop bus column) they all fit on two lines by shrinking;
+  pages appear only in narrower layouts (a wide right column, Large size).
+- **Limit.** A single word wider than two lines at 20 sp (none in the three languages under the 110-character cap)
+  would still be wrapped by characters by the text engine, not paged.
 - **Debug hooks.** `--es history '<year>|<text>'` and `--es saints '<a>;<b>'` replace today's items for captures.

@@ -439,3 +439,28 @@ the public repo and the tag are a separate issue, after storagebits's release ca
   extraction then fails or yields an empty schedule, and the next sync gets a `304`, so nothing retries until the
   feed's ETag changes. The full fix extracts from the part file before committing it (and writes the ETag only
   after); out of this issue's scope.
+
+## Event text never cut (ALG-221, 2026-10-24)
+
+- **Bug** (ALG-220). On a dated day the "on this day" event was sometimes cut with an ellipsis: `FactLine` drew it
+  at a fixed 26 sp with `maxLines = 2` (and the name-day line with `maxLines = 1`), while the app keeps events up to
+  110 characters, about 1,100 dp wide at 26 sp.
+- **Fix.** `FitText` (`ui/TextFit.kt`): the largest size from 26 to 20 sp that holds the text on two lines in the
+  width and height it gets; past that, word-aligned pages that step by themselves every 8 s with a `1/2` counter.
+  No ellipsis anywhere; nothing to press (DECISIONS, "Event text never cut").
+- **Data.** Full-year scan of the Wikipedia feed in English, French and Spanish plus the saints' calendars: the
+  longest shown texts are all at the 110-character cap; the eight widest (two per language, two saints' lines)
+  are the test fixtures.
+- **Tests.** `TextFitTest.kt`, 9 tests, 4 of them pure logic and 5 Robolectric layout tests with the bundled fonts
+  (three themes): every page of the widest real texts and of a synthetic worst case fits two lines at the narrowest
+  width (280 dp); pages join back to the whole text; the rendered row (year label, counter) is never cut and every
+  page comes round; real texts need no pages at 480 dp; a height under one line falls back to the width; the old
+  fixed caption did cut the worst case. A mutation that draws the whole text again fails the suite. 73 unit tests
+  in all, 0 failures.
+- **Emulator** (debug build; Android TV 14 emulator, 720p at 213 dpi, 1080p at 320 dpi, and a 4K AVD, whose
+  framework renders the UI at 1920×1080 like real 4K Android TV devices): the widest English and French events
+  show whole on two lines at 720p, 1080p and 4K; the synthetic worst case pages (`1/2`, `2/2`); the longest Spanish
+  saints' line shows whole. Captures are attached to the issue, not committed.
+- **Debts.** The 110-character cap hides most English events (4,931 of 6,590 in the scan; 802 of 2,314 in French,
+  598 of 1,750 in Spanish). With pages in place the cap could be raised; that changes what the app shows, so it is
+  left for a separate decision.
