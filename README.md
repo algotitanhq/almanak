@@ -219,6 +219,10 @@ For captures and tests, debug builds read these `am start` extras:
 (both need `ALMANAK_DEVICE=ip:port`, the adb address of the TV; there is no default).
 `tools/soak.sh [hours] [every_min]` starts the screensaver and logs memory. `tools/readme_media.sh` scales a
 capture and turns a screen recording into the README GIF. `shots/` is gitignored: local captures only.
+`tools/tv-update.sh <apk>` updates the app on a TV in place and keeps its settings: it never uninstalls, and refuses
+an APK signed by another key than the installed one (a debug build over the release APK) or an older version.
+`tools/upgrade-test.sh <old.apk> <new.apk>` (emulators only) installs the old APK with a full configuration, updates
+it with the new one and checks that every setting is kept.
 
 ## Architecture
 

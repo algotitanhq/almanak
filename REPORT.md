@@ -464,3 +464,20 @@ the public repo and the tag are a separate issue, after storagebits's release ca
 - **Debts.** The 110-character cap hides most English events (4,931 of 6,590 in the scan; 802 of 2,314 in French,
   598 of 1,750 in Spanish). With pages in place the cap could be raised; that changes what the app shows, so it is
   left for a separate decision.
+
+## Event text with four or more bus lines; settings kept on update (ALG-224, 2026-10-24)
+
+- **Reproduced.** Emulator (Android TV 14, 1080p), stop with four lines: the bus block turns compact, the event gets
+  about 385 dp and the widest one paged ("of Pomerania." alone, `2/2`).
+- **Fix.** The text uses the whole width under a bus table that ends above it (or just under it), may take a third
+  line where the height allows, and goes down to 20 sp at Large before paging (DECISIONS, ALG-224).
+- **Tests.** `BandLayoutTest`: 36 cases (4, 5, 6 lines × Medium, Large × six widest real events, EN/FR/ES), each whole
+  on one page, clear of the bus column and the weather band; all 36 page on the ALG-221 code. `TextFitLogicTest`:
+  the lower floor. `SettingsTest`: a settings file written by v1.0.0 is read back whole. 77 unit tests, 0 failures.
+- **Emulator captures** (debug build, 1080p): 4, 5 and 6 STM lines × Medium, Large × EN, FR, ES, 18 captures: every
+  event whole, nothing over the bus table or the weather band. Attached to the issue, not committed.
+- **Upgrade.** `tools/upgrade-test.sh`: v1.0.0 with a full configuration (two stops, route filter, French, °F, Paper,
+  picture of the day, Large/Small sizes, realtime key, guest Wi-Fi) updated in place by this build: PASS, 14 fields
+  kept, firstInstallTime unchanged. A debug APK over the release v1.0.0 is refused (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`):
+  the Shield runs the release APK, so it is updated only with the release-signed build, via `tools/tv-update.sh`.
+- **Debt.** The "two lines max" reasoning of ALG-221 in DECISIONS is superseded by this entry (kept as history).

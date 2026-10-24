@@ -850,3 +850,33 @@ features plus populaires ».
 - **Limit.** A single word wider than two lines at 20 sp (none in the three languages under the 110-character cap)
   would still be wrapped by characters by the text engine, not paged.
 - **Debug hooks.** `--es history '<year>|<text>'` and `--es saints '<a>;<b>'` replace today's items for captures.
+
+## Event text with four or more bus lines; settings kept on update (ALG-224, 2026-10-24)
+
+- **Context.** storagebits turned down the ALG-221 merge: he has at least four bus lines, and an update of his TV must
+  keep every setting. The ALG-221 fit was measured beside a two-stop column. Past three lines the bus block switches
+  to compact lines (374 dp wide, 430 dp at Large), so the event got about 385 dp at Medium, 300 dp at Large: the
+  widest texts paged on the emulator ("of Pomerania." alone, `2/2`), which reads as cut.
+- **Choice.** Three changes, in this order of preference. (1) `TopBand` (`AmbientScreen.kt`), a layout in place of
+  the top row: the module under the clock gets the whole width when the right column ends above it (four or five
+  compact lines end above the date at Medium), or starts just under the column when that leaves room for two full
+  caption lines; else it keeps the width beside the column. (2) The caption under the clock may take a third line,
+  only when the height the band leaves holds it (the fit already respects the height, so nothing reaches the
+  weather band). This replaces "two lines at most" of ALG-221, whose reason was not to push other blocks; the height
+  bound removes that risk. The bottom zone stays at two lines (there the caption's height comes out of the clock's).
+  (3) At Large the text may shrink to the same 20 sp floor as Medium (`floor = FLOOR / 1.15`) before paging: a whole
+  text beats a bigger one. Small keeps its relative floor (the user chose small). Pages stay the last resort.
+- **Rejected.** Fewer bus lines or a smaller bus table (changes what he chose to see); a marquee (see ALG-221).
+- **Proof.** `BandLayoutTest` renders the whole screen at 960×540 dp with 4, 5 and 6 lines (every line with a big
+  ETA, the tallest table), Medium and Large, and the six widest real events in English, French and Spanish: each is
+  one page, not cut, clear of the bus column and above the weather band. Against the ALG-221 code all 36 cases page.
+- **Settings on update.** The settings file (`files/settings.json`, schema 2) has not changed since v1.0.0; the STM
+  preset is read by id, so its new schedule address replaces the saved one without a migration. Same applicationId,
+  `adb install -r` keeps app data. `tools/upgrade-test.sh` proves it on the emulator: v1.0.0 (built from its tag)
+  saves a full configuration through its own settings screen, the new build updates it in place, every field is kept;
+  `SettingsTest` reads that v1.0.0 file. The trap is the signing key: the Shield runs the v1.0.0 **release** APK
+  (certificate 401bc0c3…, checked on 2026-10-24), and a debug build over it is refused
+  (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`); the only way past is an uninstall, which erases the settings. So the TV is
+  updated only with a release-signed APK (the Release workflow's dry run on `main`, whose signer is pinned to that
+  certificate), through `tools/tv-update.sh`, which never uninstalls and refuses another signer or an older version.
+  The versionName stays 1.0.0 here (`install -r` accepts the same versionCode); a version bump belongs to the release.

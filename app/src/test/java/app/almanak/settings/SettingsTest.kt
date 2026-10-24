@@ -8,6 +8,30 @@ import java.util.Locale
 import org.junit.Test
 
 class SettingsTest {
+    @Test fun `a file written by v1_0_0 is read back whole`() {
+        // Written by the v1.0.0 app itself on the emulator (tools/upgrade-test.sh, ALG-224): an update keeps it all.
+        val text = javaClass.classLoader!!.getResource("settings-v1.0.0.json").readText()
+        val s = SettingsStore.fromStoredJson(text)
+        assertEquals(ThemeId.Paper, s.theme)
+        assertEquals("fr", s.language)
+        assertEquals(app.almanak.weather.TempUnit.Fahrenheit, s.unit)
+        assertEquals(City("Montréal", 45.5019, -73.5674), s.city)
+        assertEquals(listOf("60683", "52416"), s.stops)
+        assertEquals(listOf("150", "355"), s.routes)
+        assertEquals(app.almanak.wallpaper.WallpaperMode.Potd, s.wallpaper)
+        assertEquals(
+            listOf(ModuleSize.Large, ModuleSize.Large, ModuleSize.Small),
+            listOf(Module.Almanac, Module.Bus, Module.Weather).map { s.module(it).size },
+        )
+        assertEquals("not-a-real-key", s.realtimeKey)
+        assertEquals("Almanak test", s.guestWifi.ssid)
+        assertTrue(s.onboarded)
+        // The network is a preset, read by id: the STM's new schedule address replaces the one v1.0.0 saved.
+        assertEquals(TransitAgency.STM, s.agency)
+        // Saved again by this version, nothing is lost either.
+        assertEquals(s, SettingsStore.fromStoredJson(SettingsStore.toJson(s)))
+    }
+
     @Test fun `defaults round-trip through JSON`() {
         val s = Settings()
         assertEquals(s, SettingsStore.fromJson(SettingsStore.toJson(s)))

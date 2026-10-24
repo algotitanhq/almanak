@@ -8,6 +8,10 @@ All notable changes to Almanak are listed here. The format follows
 
 ### Fixed
 
+- An "on this day" event or a name-day line is no longer cut with an ellipsis: it shrinks to fit, takes a third line
+  where there is room, and only as a last resort shows in parts that turn by themselves. With four or more bus lines
+  the event uses the whole width under the bus table, so it stays whole at the Medium and Large sizes.
+
 - The STM moved its schedule file to its new site: the STM preset uses the new address, with the Mobility Database
   mirror still as the fallback.
 - A transit network's site that answers with a web page instead of the schedule zip (as the STM's old address did,
